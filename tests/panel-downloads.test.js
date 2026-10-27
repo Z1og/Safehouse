@@ -121,3 +121,29 @@ test('restart marks interrupted panel tasks failed and removes their stale parti
   new PanelDownloads({ directory: f.panel.directory, downloads: restored, fetch });
   assert.equal(restored.jobs[0].status, 'failed'); assert.match(restored.jobs[0].error, /中断/); assert.ok(!fs.existsSync(f.panel.partial(id)));
 });
+
+test('single failed-download cleanup removes residual files and its record but preserves installed and unrelated files', async t => {
+  const f = await setup(t); const { id } = await f.start('short'); const job = await f.finished(id);
+  assert.equal(job.status, 'failed');
+  fs.writeFileSync(job.input, data.subarray(0, 9)); fs.writeFileSync(f.panel.partial(id), data.subarray(0, 4));
+  const installed = path.join(f.addons, path.basename(job.input)), unrelated = path.join(f.panel.directory, 'keep.vpk');
+  fs.writeFileSync(installed, data); fs.writeFileSync(unrelated, data);
+  const trash = path.join(f.root, 'recycle-bin'); fs.mkdirSync(trash); const moved = [];
+  await f.panel.remove(id, async file => { moved.push(file); fs.renameSync(file, path.join(trash, path.basename(file))); });
+  assert.equal(moved.length, 2); assert.equal(f.downloads.jobs.some(item => item.id === id), false);
+  assert.ok(!fs.existsSync(job.input)); assert.ok(!fs.existsSync(f.panel.partial(id)));
+  assert.deepEqual(fs.readFileSync(installed), data); assert.deepEqual(fs.readFileSync(unrelated), data);
+});
+
+test('cleanup rejects active, completed or out-of-directory downloads and retains history on recycle-bin failure', async t => {
+  const f = await setup(t); const active = await f.start('slow');
+  await assert.rejects(f.panel.remove(active.id, async () => { throw new Error('must not trash'); }), /失败或已取消/);
+  f.panel.cancel(active.id); const job = await f.finished(active.id);
+  fs.writeFileSync(job.input, data);
+  await assert.rejects(f.panel.remove(job.id, async () => { throw new Error('locked'); }), /记录已保留.*locked/);
+  assert.ok(f.downloads.jobs.includes(job)); assert.ok(fs.existsSync(job.input));
+  const outside = path.join(f.root, 'outside.vpk'); fs.writeFileSync(outside, data); job.input = outside;
+  await assert.rejects(f.panel.remove(job.id, async () => fs.rmSync(outside)), /不在客户端下载目录/);
+  assert.ok(fs.existsSync(outside));
+  job.status = 'downloaded'; await assert.rejects(f.panel.remove(job.id, async () => {}), /失败或已取消/);
+});

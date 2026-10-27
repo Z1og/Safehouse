@@ -79,7 +79,7 @@ class PanelDownloads {
           }
         }
         let offset = 0; while (offset < chunk.length) { const result = await handle.write(chunk, offset, chunk.length - offset); offset += result.bytesWritten; }
-        if (Date.now() - lastUpdate > 200) { lastUpdate = Date.now(); this.downloads.save(); }
+        if (Date.now() - lastUpdate > 200) { lastUpdate = Date.now(); this.downloads.save(false); this.downloads.progress(this.downloads.list()); }
       }
       if (!headersReady || job.bytes !== job.total) throw fail('文件下载不完整，请在面板重新获取直链');
       await handle.close(); handle = null;
@@ -107,18 +107,29 @@ class PanelDownloads {
     if (!job || job.status !== 'downloaded' || path.dirname(job.input) !== this.directory || !fs.existsSync(job.input) || fs.lstatSync(job.input).isSymbolicLink()) throw fail('下载文件不存在或尚未完成');
     return job.input;
   }
-  remove(id) {
+  async remove(id, trash) {
     const job = this.downloads.jobs.find(job => job.id === id && job.kind === 'panel');
     if (!job) throw fail('下载记录不存在');
-    if (this.active.has(id) || ['downloading', 'queued'].includes(job.status)) throw fail('下载正在进行，请先取消后再删除');
-    if (job.installQueued) throw fail('文件已进入安装队列，请安装完成后再删除');
-    if (job.input && path.dirname(path.resolve(job.input)) === this.directory) fs.rmSync(job.input, { force: true });
-    return this.downloads.remove(id);
-  }
-  removeFinished() {
-    for (const job of this.downloads.jobs.filter(job => job.kind === 'panel' && ['downloaded', 'failed', 'cancelled'].includes(job.status) && !job.installQueued)) {
-      if (job.input && path.dirname(path.resolve(job.input)) === this.directory) fs.rmSync(job.input, { force: true });
+    if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) throw fail('下载记录标识无效');
+    if (this.active.has(id) || !['failed', 'cancelled'].includes(job.status)) throw fail('仅支持清理已失败或已取消的下载');
+    const normal = value => path.resolve(value).toLowerCase();
+    if (job.input && this.downloads.jobs.some(other => other.id !== id && other.input && normal(other.input) === normal(job.input) && ['queued', 'validating', 'installing'].includes(other.status))) throw fail('文件正在安装，请完成后再清理');
+    if (normal(await fs.promises.realpath(this.directory)) !== normal(this.directory)) throw fail('下载目录包含链接，无法安全清理');
+    if (job.input && normal(path.dirname(job.input)) !== normal(this.directory)) throw fail('记录中的文件不在客户端下载目录内');
+    const candidates = [this.partial(id), ...(job.input ? [job.input] : [])], files = [];
+    for (const file of candidates) {
+      try {
+        const stat = await fs.promises.lstat(file);
+        if (!stat.isFile() || stat.isSymbolicLink() || normal(path.dirname(await fs.promises.realpath(file))) !== normal(this.directory)) throw fail('下载残留不是安全的普通文件，请在文件夹中检查');
+        files.push(file);
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
+    if (files.length && typeof trash !== 'function') throw fail('回收站操作不可用，下载记录已保留');
+    for (const file of files) {
+      try { await trash(file); }
+      catch (error) { throw fail(`文件未能移至回收站，下载记录已保留：${error.message}`); }
+    }
+    return this.downloads.remove(id);
   }
   install(id) {
     const file = this.file(id), result = this.downloads.enqueue([file]);

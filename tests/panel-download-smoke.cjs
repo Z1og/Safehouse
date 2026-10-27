@@ -95,6 +95,9 @@ const { runtime } = require('../scripts/runtime.cjs');
     const output = path.join(__dirname, '../output/playwright'); fs.mkdirSync(output, { recursive: true });
     const png = await application.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));
     fs.writeFileSync(path.join(output, 'console-adapted-native.png'), Buffer.from(png, 'base64'));
+  } catch (error) {
+    if (page && !page.isClosed()) console.error('Panel smoke state:', await page.evaluate(() => ({ busy, pendingRefresh, jobs: state.downloads.map(({ kind, status, error }) => ({ kind, status, error })), toast: document.querySelector('#toast')?.textContent })).catch(() => null));
+    throw error;
   } finally {
     if (application) await application.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

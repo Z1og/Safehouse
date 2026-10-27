@@ -123,7 +123,7 @@ class Downloads {
   remove(id) {
     const index = this.jobs.findIndex(job => job.id === id);
     if (index < 0) throw new Error('任务不存在');
-    if (this.active?.id === id || ['queued', 'validating', 'installing', 'downloading'].includes(this.jobs[index].status)) throw new Error('任务正在处理，请完成或取消后再删除');
+    if (this.active?.id === id || !['failed', 'cancelled'].includes(this.jobs[index].status)) throw new Error('仅支持删除已失败或已取消的任务');
     this.jobs.splice(index, 1); this.save(); return this.list();
   }
   clear() { this.jobs = this.jobs.filter(job => !['completed', 'downloaded', 'failed', 'cancelled'].includes(job.status)); this.save(); return this.list(); }

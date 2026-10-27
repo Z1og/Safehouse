@@ -5,6 +5,7 @@ const { pathToFileURL } = require('node:url');
 const { Library, discover } = require('./core/library');
 const { Downloads } = require('./core/downloads');
 const { PanelDownloads } = require('./core/panel-downloads');
+const { Localizations } = require('./core/localization');
 const { Community, Translator } = require('./core/community');
 const { readLocalSteamState } = require('./core/steam');
 const { Workshop } = require('./core/workshop');
@@ -19,7 +20,7 @@ if (process.env.SAFEHOUSE_DATA_DIR) app.setPath('userData', path.resolve(process
 if (!app.requestSingleInstanceLock()) app.quit();
 let mainWindow, library, downloads, community, translator, settings, settingsFile, discovery, workshop;
 let operation = false;
-let searchPlanner, bilingualSearch, centerConsole, panelDownloads;
+let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations;
 const rendererPath = path.join(__dirname, 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
 const notify = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:changed'); };
@@ -35,7 +36,7 @@ async function exclusive(action) {
   operation = true; try { return await action(); } finally { operation = false; }
 }
 function currentState() {
-  const inventory = library.scan(); downloads.syncWorkshop(inventory.items);
+  const inventory = localizations.decorate(library.scan()); downloads.syncWorkshop(inventory.items);
   const steam = readLocalSteamState({ roots: discovery.steamRoots }), ugc = workshop.status();
   if (ugc.ready) {
     steam.account = ugc.account; steam.available = true;
@@ -63,13 +64,13 @@ app.whenReady().then(async () => {
   const stateDir = app.getPath('userData'); fs.mkdirSync(stateDir, { recursive: true });
   settingsFile = path.join(stateDir, 'settings.json');
   settings = readJson(settingsFile, { gameRoot: '', theme: 'system', autoTranslate: true, language: app.getLocale() });
-  settings.localizedWorkshopIds = [...new Set((Array.isArray(settings.localizedWorkshopIds) ? settings.localizedWorkshopIds : []).filter(value => /^\d{1,20}$/.test(String(value))).map(String))];
   const panelUrl = configuredConsoleUrl(settings.consoleUrl);
   if (settings.consoleUrl !== panelUrl) { settings.consoleUrl = panelUrl; atomicWrite(settingsFile, JSON.stringify(settings, null, 2)); }
   discovery = discover();
   library = new Library({ gameRoot: settings.gameRoot || discovery.games[0] || '', steamRoots: discovery.steamRoots });
   // Stale saved paths remain visible in settings, but never permit a file operation.
   if (settings.gameRoot && !fs.existsSync(path.join(settings.gameRoot, 'left4dead2', 'gameinfo.txt'))) { discovery.warnings.push('保存的游戏路径已失效，请重新选择'); library.root = ''; }
+  localizations = new Localizations({ stateDir, library });
   downloads = new Downloads({
     stateDir,
     library,
@@ -141,18 +142,13 @@ app.whenReady().then(async () => {
   bind('unsubscribe', async id => {
     if (operation) throw new Error('正在处理文件操作，请稍候');
     operation = true;
-    try { return await unsubscribeAndUninstall({ id, workshop, downloads, library, trash: file => shell.trashItem(file), preserveLocal: settings.localizedWorkshopIds.includes(String(id)) }); }
+    try { return await unsubscribeAndUninstall({ id, workshop, downloads, library, localizations, trash: file => shell.trashItem(file) }); }
     finally { operation = false; notify(); }
   });
-  bind('toggleLocalization', (id, enabled) => {
-    if (typeof id !== 'string' || !/^\d{1,20}$/.test(id) || typeof enabled !== 'boolean') throw new Error('本地保留设置无效');
-    const ids = new Set(settings.localizedWorkshopIds);
-    if (enabled) ids.add(id); else ids.delete(id);
-    settings.localizedWorkshopIds = [...ids];
-    atomicWrite(settingsFile, JSON.stringify(settings, null, 2));
-    notify();
-    return settings.localizedWorkshopIds;
-  });
+  bind('localize', ids => exclusive(async () => {
+    try { return await localizations.localize(ids); }
+    finally { notify(); }
+  }));
   bind('translate', text => translator.translate(text, settings.language || app.getLocale()));
   bind('settings', value => {
     if (typeof value !== 'object' || !value) throw new Error('设置无效');
@@ -163,8 +159,8 @@ app.whenReady().then(async () => {
   });
   bind('cancel', id => downloads.jobs.some(job => job.id === id && job.kind === 'panel') ? panelDownloads.cancel(id) : downloads.cancel(id));
   bind('retry', id => { if (operation) throw new Error('正在处理文件操作'); return downloads.retry(id); });
-  bind('deleteDownload', id => id && downloads.jobs.find(job => job.id === id)?.kind === 'panel' ? panelDownloads.remove(id) : downloads.remove(id));
-  bind('clearDownloads', () => { panelDownloads.removeFinished(); return downloads.clear(); });
+  bind('deleteDownload', id => exclusive(() => downloads.jobs.find(job => job.id === id)?.kind === 'panel' ? panelDownloads.remove(id, file => shell.trashItem(file)) : downloads.remove(id)));
+  bind('clearDownloads', () => downloads.clear());
   bind('open', value => shell.openExternal(officialUrl(value)));
   bind('projectLink', key => shell.openExternal(projectLink(key)));
   bind('copyGroup', () => { clipboard.writeText(PROJECT.group); return PROJECT.group; });

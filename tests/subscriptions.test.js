@@ -26,13 +26,18 @@ test('unsubscribe removes every exact project addon copy while preserving other 
   assert.equal(downloads.list()[0].status, 'cancelled');
 });
 
-test('local preservation skips addon removal after Steam unsubscribe', async t => {
+test('localization retains an independent copy while unsubscribe removes Steam-managed addons', async t => {
   const root = fixture(t), { gameRoot, addons } = game(root), file = path.join(addons, 'safehouse-workshop-123.vpk');
   fs.writeFileSync(file, vpk({ 'maps/test.bsp': 'map' }));
   const library = new Library({ gameRoot }), downloads = new Downloads({ stateDir: path.join(root, 'state'), library });
+  const { Localizations } = require('../core/localization');
+  const localizations = new Localizations({ stateDir: path.join(root, 'state'), library });
+  await localizations.localize([library.scan().items[0].id]);
+  const copy = localizations.retained('123')[0];
   let unsubscribed = false;
-  const result = await unsubscribeAndUninstall({ id: '123', workshop: { unsubscribe: async id => { unsubscribed = true; return { id, subscribed: false }; } }, downloads, library, preserveLocal: true, trash: async () => { throw new Error('must not delete'); } });
-  assert.equal(unsubscribed, true); assert.equal(result.preserved, true); assert.deepEqual(result.removed, []); assert.ok(fs.existsSync(file));
+  const result = await unsubscribeAndUninstall({ id: '123', workshop: { unsubscribe: async id => { unsubscribed = true; return { id, subscribed: false }; } }, downloads, library, localizations, trash: async target => { assert.equal(unsubscribed, true); fs.rmSync(target); } });
+  assert.equal(result.preserved, true); assert.equal(result.retained, 1); assert.equal(result.removed.length, 1);
+  assert.ok(!fs.existsSync(file)); assert.ok(fs.existsSync(copy.file));
 });
 
 test('failed Steam unsubscribe leaves installed files and queued downloads untouched', async t => {
