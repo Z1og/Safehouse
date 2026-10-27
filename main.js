@@ -69,7 +69,14 @@ app.whenReady().then(async () => {
   library = new Library({ gameRoot: settings.gameRoot || discovery.games[0] || '', steamRoots: discovery.steamRoots });
   // Stale saved paths remain visible in settings, but never permit a file operation.
   if (settings.gameRoot && !fs.existsSync(path.join(settings.gameRoot, 'left4dead2', 'gameinfo.txt'))) { discovery.warnings.push('保存的游戏路径已失效，请重新选择'); library.root = ''; }
-  downloads = new Downloads({ stateDir, library, changed: notify });
+  downloads = new Downloads({
+    stateDir,
+    library,
+    changed: notify,
+    progress: value => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:downloadsChanged', value);
+    },
+  });
   const directSession = session.fromPartition('safehouse-direct-files');
   panelDownloads = new PanelDownloads({ downloads, directory: process.env.SAFEHOUSE_DATA_DIR ? path.join(stateDir, 'panel-downloads') : path.join(app.getPath('downloads'), 'Safehouse'), fetch: (...args) => directSession.fetch(...args) });
   ipcMain.handle('safehouse:panelDownload', async (event, value) => {
@@ -169,7 +176,6 @@ app.whenReady().then(async () => {
           else downloads.updateWorkshop(job.workshopId, { status: progress.downloading ? 'downloading' : 'steam', bytes: progress.bytes, total: progress.total, error: '' });
         } catch (error) { downloads.updateWorkshop(job.workshopId, { error: error.message }); }
       }
-      notify();
     }
   }, 2000); watcher.unref();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

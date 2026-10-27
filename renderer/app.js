@@ -453,6 +453,11 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
 if (api) {
   let refreshTimer;
   api.onChanged(() => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refresh(!['workshop', 'settings', 'console'].includes(page) && !document.querySelector('#library-search:focus, #library-slot:focus, #library-sort:focus')).catch(error => toast(error.message)), 250); });
+  api.onDownloadsChanged?.(downloads => {
+    if (!state || !Array.isArray(downloads)) return;
+    state.downloads = downloads;
+    renderTransfers();
+  });
   api.onConsoleChanged?.(value => { consoleState = value; renderServerConnection(); if (page === 'console') renderConsoleStatus(); if (value.notice) toast(value.notice); });
 }
 refresh().catch(error => { main.innerHTML = empty('warning', '安全屋暂时无法打开', escape(error.message), button('重新扫描', 'scan', 'refresh', 'primary')); });

@@ -35,14 +35,14 @@ async function unpackZip(file, destination, signal) {
   });
 }
 class Downloads {
-  constructor({ stateDir, library, changed = () => {} }) {
-    this.stateDir = stateDir; this.library = library; this.changed = changed; this.active = null;
+  constructor({ stateDir, library, changed = () => {}, progress = () => {} }) {
+    this.stateDir = stateDir; this.library = library; this.changed = changed; this.progress = progress; this.active = null;
     fs.mkdirSync(stateDir, { recursive: true }); this.store = path.join(stateDir, 'downloads.json');
     this.jobs = readJson(this.store, []);
     for (const job of this.jobs) if (['queued', 'installing', 'validating'].includes(job.status) || job.kind === 'panel' && job.status === 'downloading') { job.status = 'failed'; job.error = job.kind === 'panel' ? '上次下载被中断，请从面板重新获取直链' : '上次安装被中断，可重试'; }
     this.save();
   }
-  save() { atomicWrite(this.store, JSON.stringify(this.jobs, null, 2)); this.changed(); }
+  save(notify = true) { atomicWrite(this.store, JSON.stringify(this.jobs, null, 2)); if (notify) this.changed(); }
   list() { return this.jobs.map(({ input, inputs, ...job }) => ({ ...job, filename: input ? path.basename(input) : '' })); }
   enqueue(files) {
     if (!Array.isArray(files) || !files.length || files.length > 100) throw new Error('每次可导入 1–100 个 VPK / ZIP 文件');
@@ -64,7 +64,12 @@ class Downloads {
   updateWorkshop(id, update) {
     const job = this.jobs.find(job => job.kind === 'workshop' && job.workshopId === id && !['cancelled'].includes(job.status));
     if (!job) return;
-    if (Object.entries(update).some(([key, value]) => job[key] !== value)) { Object.assign(job, update); this.save(); }
+    const changed = Object.entries(update).filter(([key, value]) => job[key] !== value);
+    if (!changed.length) return;
+    Object.assign(job, update);
+    const progressOnly = changed.every(([key]) => key === 'bytes' || key === 'total');
+    this.save(!progressOnly);
+    if (progressOnly) this.progress(this.list());
   }
   cancelWorkshop(id) {
     for (const job of this.jobs.filter(job => job.kind === 'workshop' && job.workshopId === id)) { job.status = 'cancelled'; job.error = ''; }
@@ -152,7 +157,7 @@ class Downloads {
         const staged = path.dirname(file) === stage ? file : path.join(stage, outputName(file));
         if (staged !== file) {
           const source = fs.createReadStream(file);
-          source.on('data', chunk => { job.bytes += chunk.length; if (Date.now() - lastUpdate > 200) { lastUpdate = Date.now(); this.changed(); } });
+          source.on('data', chunk => { job.bytes += chunk.length; if (Date.now() - lastUpdate > 200) { lastUpdate = Date.now(); this.progress(this.list()); } });
           await pipeline(source, fs.createWriteStream(staged, { flags: 'wx' }), { signal });
         } else job.bytes += fs.statSync(file).size;
         signal.throwIfAborted();

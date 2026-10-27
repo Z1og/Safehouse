@@ -5,4 +5,5 @@ api.consoleCopyConnection = () => ipcRenderer.invoke('safehouse:consoleCopyConne
 api.onConsoleChanged = callback => { const listener = (_, value) => callback(value); ipcRenderer.on('safehouse:consoleChanged', listener); return () => ipcRenderer.removeListener('safehouse:consoleChanged', listener); };
 api.filePath = file => webUtils.getPathForFile(file);
 api.onChanged = listener => { const handler = () => listener(); ipcRenderer.on('safehouse:changed', handler); return () => ipcRenderer.removeListener('safehouse:changed', handler); };
+api.onDownloadsChanged = listener => { const handler = (_, value) => listener(value); ipcRenderer.on('safehouse:downloadsChanged', handler); return () => ipcRenderer.removeListener('safehouse:downloadsChanged', handler); };
 contextBridge.exposeInMainWorld('safehouse', api);
