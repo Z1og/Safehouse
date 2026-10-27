@@ -1,0 +1,112 @@
+<div align="center">
+
+# Safehouse · 安全屋
+
+### 地图、角色、枪械，一起装进安全屋。
+
+求生之路 2 的 Windows 桌面模组管理器。管理本地 VPK、逛创意工坊，也能接入自己的服务器控制台。
+
+[![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?logo=windows)](https://github.com/Z1og/Safehouse/releases/latest)
+[![Release](https://img.shields.io/github/v/release/Z1og/Safehouse?label=下载)](https://github.com/Z1og/Safehouse/releases/latest)
+[![QQ](https://img.shields.io/badge/QQ%E4%BA%A4%E6%B5%81%E7%BE%A4-1002677414-12B7F5)](#交流群)
+
+[下载客户端](https://github.com/Z1og/Safehouse/releases/latest) · [反馈问题](https://github.com/Z1og/Safehouse/issues) · [L4D2 服务器控制台](https://github.com/Z1og/L4D2-Control)
+
+</div>
+
+![Safehouse 模组管理界面](docs/images/library-light.png)
+
+> 截图使用示例账号与临时测试内容，展示实际客户端界面；程序不附带这些模组或游戏本体。当前为 Beta，欢迎反馈。
+
+## 它能做什么
+
+| 功能 | 实际用法 |
+| --- | --- |
+| 模组管理 | 导入 VPK / ZIP，单项或批量启停；本地模组可移至回收站，保留导入源文件 |
+| 具体替换分类 | 幸存者细分八名角色；武器细分手枪、冲锋枪、霰弹枪、步枪、狙击枪、近战及具体槽位 |
+| 创意工坊 | 搜索、筛选、看详情，在客户端内订阅、下载、安装；取消订阅同时卸载本地副本 |
+| 中英文搜索 | 内置角色 / 武器别名，中文也能匹配英文标题；在线翻译扩展更多关键词，失败时保留原词 |
+| 本机 Steam 状态 | 自动读取本地账号；工坊操作使用本机正在登录的 Steam，无须在管理器重复登录 |
+| 中心控制台 | 输入已有 L4D2-Control 面板地址，在桌面里操作；支持缩放、宽屏与面板直连文件下载 |
+| 服务器连接 | 从当前面板读取真实游戏地址与端口，一键复制 `connect 地址:端口` |
+| 外观与交流 | 浅色 / 深色 / 跟随系统，QQ 群号一键复制，项目源码与更新入口 |
+
+本项目与 [L4D2-Control](https://github.com/Z1og/L4D2-Control) 相互配合：**Safehouse 管本机，L4D2-Control 管服务器。** 只使用本地模组管理时，无须部署服务器面板。
+
+## 下载与启动
+
+1. 打开 [Releases](https://github.com/Z1og/Safehouse/releases/latest)，下载 `Safehouse-0.1.10-win-x64.zip`。
+2. **完整解压 ZIP**，双击解压目录内的 `Safehouse.exe`。不要把启动器单独拿出来，也不要直接在压缩包里运行。
+3. 首次启动自动识别 Steam 游戏库；未识别时，到「偏好设置」手动选择 `Left 4 Dead 2` 目录。
+4. 拖入 VPK / ZIP，或前往「创意工坊」订阅内容，即可开始使用。
+
+支持 **Windows 10 / 11 x64**。玩家无需安装 Node.js，也无需以管理员身份运行。发布程序暂未代码签名，Windows 可能显示未知发布者提示。
+
+更新时先退出旧窗口，完整解压新版并启动即可。永久设置和面板会话存于 `%APPDATA%\Safehouse`，与版本文件夹分开；不要删除该数据目录。面板会话仍受服务器的过期、退出和密码变更影响。
+
+## 模组如何管理
+
+- **本地内容**：点击「导入内容」或拖放文件。支持单文件 VPK，以及包含 VPK 的 ZIP；同名不同内容不会覆盖。
+- **启用 / 禁用**：修改游戏实际的 `left4dead2/addonlist.txt`，下次加载游戏内容时生效。
+- **删除本地模组**：卡片或详情里点「删除」，确认后仅将已安装副本移至 Windows 回收站，原始导入文件保留。
+- **工坊项目**：保持 Steam 运行，使用拥有求生之路 2 的账号。订阅后显示真实下载进度；取消订阅会停止对应任务并卸载本地副本。
+- **分类依据**：已安装包优先按 VPK 内实际模型、材质和脚本路径识别；工坊页面参考作者标签与替换说明，标题推测会单独标注。
+- **同目标查看**：集中查看替换同一角色或枪械的内容，再逐项启停对照。这不是自动判定冲突或保证所有 Mod 兼容。
+
+## 接入服务器控制台
+
+「中心控制台」中填写自己的完整 HTTP / HTTPS 面板地址，连接并保存。新用户没有预设服务器；旧版本已保存的地址继续保留。
+
+接入 [L4D2-Control](https://github.com/Z1og/L4D2-Control) 后，可以继续使用原面板的服务器管理功能。对应面板的「直连下载」可交由客户端传输，显示进度、取消、打开文件夹及安装入口；需要有效直链与相应服务可用。
+
+左侧服务器连接命令来自面板实际提供的游戏地址，而非面板网页地址；支持 IPv4、域名及带方括号的 IPv6。切换面板或失去连接后会清除旧命令。
+
+## 已知边界
+
+- 不提供游戏本体、破解、加速器、代理订阅或预装 Mod；不会要求输入 Steam 密码。
+- 不支持 RAR / 7z / 裸 BSP / SourceMod 插件导入。分卷 VPK 不支持在客户端安装或删除。
+- 单文件上限 2 GiB，ZIP 总解压上限 4 GiB；会检查包结构，不覆盖已有内容。下载地址和网络状况仍可能影响成功率。
+- Steam 缓存只读。工坊必须由 Steam 账号拥有对应游戏并能正常访问服务；下载显示实际状态，不承诺绕过 Steam 限制。
+- 界面为中文，社区内容可以翻译到所选语言。在线翻译会发送搜索词或社区公开文字；网络不可用时保留原文。
+- 没有自动更新、云同步或 GameMaps 客户端接入。中心控制台里的功能由所接入面板提供。
+
+## 交流群
+
+**QQ 交流群：1002677414**
+
+和 L4D2-Control 共用交流群，交流地图、Mod、开服经验和功能建议。客户端左下角点击群号即可复制，再到 QQ 搜索加入。
+
+反馈问题请附上：客户端版本、复现步骤、报错截图，以及问题属于本地导入、工坊还是服务器面板。请勿公开账号密码、Cookie 或带签名的私人下载链接。
+
+## 本地开发
+
+需要 Node.js 22 或更新版本，当前开发与发布目标为 Windows x64。
+
+```powershell
+npm ci
+npm test
+npm start
+```
+
+```powershell
+npm run smoke:renderer
+npm run smoke
+npm run smoke:taxonomy
+npm run smoke:console-search
+npm run smoke:panel-download
+npm run smoke:server-connection
+npm run licenses
+npm run pack
+```
+
+构建需要 Zig，设置 `SAFEHOUSE_ZIG_BIN` 为本机 `zig.exe` 路径。发布输出位于仓库相邻的 `outputs/desktop`。测试使用临时游戏目录；带 `live` 的手工集成测试会访问真实服务，不属于默认 `npm test`。
+
+详细结构、测试和恢复说明见 [开发文档](docs/DEVELOPMENT.md)；宣传文案见 [小黑盒介绍](docs/小黑盒介绍.md)。
+
+## 项目来源与许可
+
+© 2026 Z1og and original contributors.
+
+原创部分采用 [Safehouse Non-Commercial License 1.0](LICENSE)：允许非商业使用，商业使用需事先取得授权。这是源码公开的非商业项目，不应描述为不受限制的开源许可。
+
+第三方依赖、游戏资源和玩家 Mod 继续遵守各自许可，详见 [NOTICE.md](NOTICE.md) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。界面视觉参考 Miuix，以 Electron 实现；与 Valve / Steam 无隶属关系。

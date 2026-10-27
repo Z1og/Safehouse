@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Safehouse · 求生之路 2</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-icon"><svg viewBox="0 0 24 24" fill="none"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4z"/><path d="M8 6V3h3"/></svg></div><div><b>Safehouse<span class="beta">BETA</span></b><small>求生之路 2 · 本地管理器</small></div></div>
+      <div class="sidebar-label">你的安全屋</div>
+      <nav aria-label="主导航">
+        <button class="nav active" data-page="library"><span data-icon="library"></span>模组管理<span class="nav-count" id="library-count">0</span></button>
+        <button class="nav" data-page="workshop"><span data-icon="compass"></span>创意工坊<span class="nav-dot"></span></button>
+        <button class="nav" data-page="console"><span data-icon="drive"></span>中心控制台</button>
+      </nav>
+      <section class="sidebar-connection" id="server-connection" aria-label="服务器连接" data-status="unavailable"><div class="server-connection-heading"><b><i class="server-connection-dot"></i>服务器连接</b><button class="server-connection-copy" data-action="copy-server-connection" aria-label="复制服务器连接命令" title="复制服务器连接命令" disabled><span data-icon="copy"></span></button></div><button class="server-connection-command" id="server-connection-command" data-action="copy-server-connection" aria-label="复制游戏连接命令" disabled>暂未获取服务器地址</button><p id="server-connection-hint">打开控制台后自动读取</p></section>
+      <div class="sidebar-tip"><div class="tip-orbit"><span data-icon="sparkles"></span></div><b>好内容，一起装进安全屋</b><p>地图、武器、角色和音效。<br>让每一次开黑都有新体验。</p><button data-action="import">导入本地内容 <span data-icon="arrow-right"></span></button></div>
+      <div class="sidebar-bottom"><button class="nav" data-action="project-group" title="复制 QQ 群号，在 QQ 搜索加入" aria-label="复制 QQ 群号 1002677414"><span data-icon="copy"></span>QQ群 · 1002677414</button><button class="nav" data-page="settings"><span data-icon="settings"></span>偏好设置</button><button class="account" id="account" data-page="settings"><span class="avatar"><span data-icon="steam"></span></span><span><b id="account-name">Steam 本地状态</b><small id="account-status">正在读取本机账号</small></span><span data-icon="chevron-right"></span></button></div>
+    </aside>
+    <div class="workspace">
+      <header class="titlebar"><div class="breadcrumb">安全屋 <span data-icon="chevron-right"></span><b id="breadcrumb">模组管理</b></div><div class="titlebar-right"><span class="local-badge"><i></i> 本地客户端</span><div class="window-buttons"><button aria-label="最小化" data-window="minimize"><span data-icon="minus"></span></button><button aria-label="最大化" data-window="maximize"><span data-icon="square"></span></button><button aria-label="关闭" data-window="close"><span data-icon="close"></span></button></div></div></header>
+      <main id="main"><div class="startup"><span class="spinner"></span><p>正在打开你的安全屋…</p></div></main>
+      <footer class="statusbar"><span id="game-status"><i class="status-dot"></i>正在识别游戏目录</span><span>LEFT 4 DEAD 2<span class="footer-separator">/</span>APP 550<span class="footer-separator">·</span><span id="version">v0.1.0</span></span></footer>
+    </div>
+  </div>
+  <div class="drop-overlay" id="drop-overlay"><div><span data-icon="package"></span><h2>放进你的安全屋</h2><p>松开以导入 VPK 或 ZIP 内容包</p></div></div>
+  <dialog id="details-dialog" aria-label="内容详情"><button class="dialog-close icon-button" data-action="close-dialog" aria-label="关闭详情"><span data-icon="close"></span></button><div id="details-content"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="catalog.js"></script>
+  <script src="workshop-catalog.js"></script>
+  <script src="workshop-labels.js"></script>
+  <script src="search-catalog.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

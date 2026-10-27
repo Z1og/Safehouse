@@ -1,0 +1,16 @@
+node_modules/
+output/
+TODO.md
+.env
+.env.*
+*.log
+*.zip
+*.exe
+*.vpk
+*.bin
+*.pem
+*.key
+*.pfx
+*.p12
+.DS_Store
+Thumbs.db
