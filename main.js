@@ -63,6 +63,7 @@ app.whenReady().then(async () => {
   const stateDir = app.getPath('userData'); fs.mkdirSync(stateDir, { recursive: true });
   settingsFile = path.join(stateDir, 'settings.json');
   settings = readJson(settingsFile, { gameRoot: '', theme: 'system', autoTranslate: true, language: app.getLocale() });
+  settings.localizedWorkshopIds = [...new Set((Array.isArray(settings.localizedWorkshopIds) ? settings.localizedWorkshopIds : []).filter(value => /^\d{1,20}$/.test(String(value))).map(String))];
   const panelUrl = configuredConsoleUrl(settings.consoleUrl);
   if (settings.consoleUrl !== panelUrl) { settings.consoleUrl = panelUrl; atomicWrite(settingsFile, JSON.stringify(settings, null, 2)); }
   discovery = discover();
@@ -140,8 +141,17 @@ app.whenReady().then(async () => {
   bind('unsubscribe', async id => {
     if (operation) throw new Error('正在处理文件操作，请稍候');
     operation = true;
-    try { return await unsubscribeAndUninstall({ id, workshop, downloads, library, trash: file => shell.trashItem(file) }); }
+    try { return await unsubscribeAndUninstall({ id, workshop, downloads, library, trash: file => shell.trashItem(file), preserveLocal: settings.localizedWorkshopIds.includes(String(id)) }); }
     finally { operation = false; notify(); }
+  });
+  bind('toggleLocalization', (id, enabled) => {
+    if (typeof id !== 'string' || !/^\d{1,20}$/.test(id) || typeof enabled !== 'boolean') throw new Error('本地保留设置无效');
+    const ids = new Set(settings.localizedWorkshopIds);
+    if (enabled) ids.add(id); else ids.delete(id);
+    settings.localizedWorkshopIds = [...ids];
+    atomicWrite(settingsFile, JSON.stringify(settings, null, 2));
+    notify();
+    return settings.localizedWorkshopIds;
   });
   bind('translate', text => translator.translate(text, settings.language || app.getLocale()));
   bind('settings', value => {
@@ -153,7 +163,8 @@ app.whenReady().then(async () => {
   });
   bind('cancel', id => downloads.jobs.some(job => job.id === id && job.kind === 'panel') ? panelDownloads.cancel(id) : downloads.cancel(id));
   bind('retry', id => { if (operation) throw new Error('正在处理文件操作'); return downloads.retry(id); });
-  bind('clearDownloads', () => downloads.clear());
+  bind('deleteDownload', id => id && downloads.jobs.find(job => job.id === id)?.kind === 'panel' ? panelDownloads.remove(id) : downloads.remove(id));
+  bind('clearDownloads', () => { panelDownloads.removeFinished(); return downloads.clear(); });
   bind('open', value => shell.openExternal(officialUrl(value)));
   bind('projectLink', key => shell.openExternal(projectLink(key)));
   bind('copyGroup', () => { clipboard.writeText(PROJECT.group); return PROJECT.group; });

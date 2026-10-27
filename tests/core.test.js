@@ -86,6 +86,15 @@ test('a Steam download completes only when a valid installed file is observed', 
   queue.trackWorkshop('123', 'Map'); queue.syncWorkshop([{ workshopId: '123', source: 'cache', size: 15 }]); assert.equal(queue.list()[0].status, 'steam');
   queue.syncWorkshop([{ workshopId: '123', source: 'workshop', size: 15 }]); assert.equal(queue.list()[0].status, 'completed');
 });
+
+test('failed task records can be removed without deleting the original import source', t => {
+  const root = fixture(t), { gameRoot } = game(root), source = path.join(root, 'source.vpk');
+  fs.writeFileSync(source, vpk({ 'maps/test.bsp': 'map' }));
+  const queue = new Downloads({ stateDir: path.join(root, 'state'), library: new Library({ gameRoot }) });
+  queue.jobs.push({ id: 'failed', kind: 'import', input: source, status: 'failed', title: 'source.vpk' });
+  queue.save(false); queue.remove('failed');
+  assert.ok(fs.existsSync(source)); assert.equal(queue.jobs.some(job => job.id === 'failed'), false);
+});
 test('community identities remain attached to their own preview links', () => {
   const html = '<div class="workshopItem"><a href="https://steamcommunity.com/sharedfiles/filedetails/?id=123"><img alt="First" src="https://images.steamusercontent.com/1"></a><div class="workshopItemTitle">First</div></div><a href="https://evil.example/sharedfiles/filedetails/?id=456"><img alt="Wrong"></a>';
   const items = parseSearch(html); assert.equal(items.length, 1); assert.equal(items[0].id, '123');

@@ -107,6 +107,19 @@ class PanelDownloads {
     if (!job || job.status !== 'downloaded' || path.dirname(job.input) !== this.directory || !fs.existsSync(job.input) || fs.lstatSync(job.input).isSymbolicLink()) throw fail('下载文件不存在或尚未完成');
     return job.input;
   }
+  remove(id) {
+    const job = this.downloads.jobs.find(job => job.id === id && job.kind === 'panel');
+    if (!job) throw fail('下载记录不存在');
+    if (this.active.has(id) || ['downloading', 'queued'].includes(job.status)) throw fail('下载正在进行，请先取消后再删除');
+    if (job.installQueued) throw fail('文件已进入安装队列，请安装完成后再删除');
+    if (job.input && path.dirname(path.resolve(job.input)) === this.directory) fs.rmSync(job.input, { force: true });
+    return this.downloads.remove(id);
+  }
+  removeFinished() {
+    for (const job of this.downloads.jobs.filter(job => job.kind === 'panel' && ['downloaded', 'failed', 'cancelled'].includes(job.status) && !job.installQueued)) {
+      if (job.input && path.dirname(path.resolve(job.input)) === this.directory) fs.rmSync(job.input, { force: true });
+    }
+  }
   install(id) {
     const file = this.file(id), result = this.downloads.enqueue([file]);
     const job = this.downloads.jobs.find(job => job.id === id); job.installQueued = true; this.downloads.save(); return result;

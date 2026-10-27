@@ -26,6 +26,15 @@ test('unsubscribe removes every exact project addon copy while preserving other 
   assert.equal(downloads.list()[0].status, 'cancelled');
 });
 
+test('local preservation skips addon removal after Steam unsubscribe', async t => {
+  const root = fixture(t), { gameRoot, addons } = game(root), file = path.join(addons, 'safehouse-workshop-123.vpk');
+  fs.writeFileSync(file, vpk({ 'maps/test.bsp': 'map' }));
+  const library = new Library({ gameRoot }), downloads = new Downloads({ stateDir: path.join(root, 'state'), library });
+  let unsubscribed = false;
+  const result = await unsubscribeAndUninstall({ id: '123', workshop: { unsubscribe: async id => { unsubscribed = true; return { id, subscribed: false }; } }, downloads, library, preserveLocal: true, trash: async () => { throw new Error('must not delete'); } });
+  assert.equal(unsubscribed, true); assert.equal(result.preserved, true); assert.deepEqual(result.removed, []); assert.ok(fs.existsSync(file));
+});
+
 test('failed Steam unsubscribe leaves installed files and queued downloads untouched', async t => {
   const root = fixture(t), { gameRoot, addons } = game(root), file = path.join(addons, 'safehouse-workshop-123.vpk');
   fs.writeFileSync(file, vpk({ 'maps/test.bsp': 'map' }));
