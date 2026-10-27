@@ -101,7 +101,7 @@ npm run pack
 
 构建需要 Zig，设置 `SAFEHOUSE_ZIG_BIN` 为本机 `zig.exe` 路径。发布输出位于仓库相邻的 `outputs/desktop`。测试使用临时游戏目录；带 `live` 的手工集成测试会访问真实服务，不属于默认 `npm test`。
 
-详细结构、测试和恢复说明见 [开发文档](docs/DEVELOPMENT.md)；宣传文案见 [小黑盒介绍](docs/小黑盒介绍.md)。
+详细结构、测试和恢复说明见 [开发文档](docs/DEVELOPMENT.md)。
 
 ## 项目来源与许可
 
