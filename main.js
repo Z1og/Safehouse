@@ -149,7 +149,7 @@ app.whenReady().then(async () => {
     try { return await localizations.localize(ids); }
     finally { notify(); }
   }));
-  bind('translate', text => translator.translate(text, settings.language || app.getLocale()));
+  bind('translate', (text, options) => translator.translate(text, settings.language || app.getLocale(), { retry: options?.retry === true }));
   bind('settings', value => {
     if (typeof value !== 'object' || !value) throw new Error('设置无效');
     if (value.theme !== undefined) { if (!['system', 'light', 'dark'].includes(value.theme)) throw new Error('主题无效'); settings.theme = value.theme; nativeTheme.themeSource = value.theme; }

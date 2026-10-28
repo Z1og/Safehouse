@@ -1,6 +1,5 @@
-const crypto = require('node:crypto');
+const { Translator } = require('./translator');
 const cheerio = require('cheerio');
-const { atomicWrite, readJson } = require('./valve');
 const { categories: WORKSHOP_CATEGORIES, resolveFilter } = require('../renderer/workshop-catalog');
 
 function workshopId(value) {
@@ -88,36 +87,6 @@ class Community {
     if (item?.result !== 1 || String(item.publishedfileid) !== id || item.consumer_app_id !== 550) throw new Error('项目不可用，或不是求生之路 2 的内容');
     const $ = cheerio.load(String(item.description || '').replace(/\[\/?[^\]]+\]/g, ' '));
     return { id, title: item.title, description: $.text().trim().slice(0, 12000), author: String(item.creator || ''), image: /^https:\/\//.test(item.preview_url || '') ? item.preview_url : '', size: Number(item.file_size) || 0, tags: (item.tags || []).map(tag => tag.tag), url: `https://steamcommunity.com/sharedfiles/filedetails/?id=${id}` };
-  }
-}
-class Translator {
-  constructor({ file, fetch }) { this.file = file; this.fetch = fetch; this.cache = readJson(file, {}); }
-  async translate(text, language, { timeoutMs = 20000 } = {}) {
-    if (typeof text !== 'string' || !text.trim() || text.length > 12000) throw new Error('翻译文本需要在 1–12000 个字符之间');
-    if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(language)) throw new Error('目标语言无效');
-    const key = crypto.createHash('sha256').update(`${language}\0${text}`).digest('hex');
-    if (this.cache[key]) return this.cache[key];
-    // Only entered search terms or public community text; never credentials or local file contents.
-    const url = new URL('https://translate.googleapis.com/translate_a/single');
-    url.search = new URLSearchParams({ client: 'gtx', sl: 'auto', tl: language, dt: 't', q: text }).toString();
-    let result;
-    if (text.length > 1600) {
-      const chunks = [];
-      for (let position = 0; position < text.length; position += 1600) chunks.push(text.slice(position, position + 1600));
-      const translated = [];
-      for (const chunk of chunks) translated.push(await this.translate(chunk, language));
-      result = { text: translated.map(part => part.text).join(''), sourceLanguage: translated[0].sourceLanguage, language };
-    } else {
-      const response = await this.fetch(url.href, { signal: AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) throw new Error(`翻译服务暂不可用（HTTP ${response.status}）`);
-      const data = await response.json();
-      const translated = data[0]?.map(part => part[0] || '').join('');
-      if (!translated) throw new Error('翻译服务未返回文本');
-      result = { text: translated, sourceLanguage: data[2] || 'auto', language };
-    }
-    this.cache[key] = result;
-    const keys = Object.keys(this.cache); for (const old of keys.slice(0, Math.max(0, keys.length - 1000))) delete this.cache[old];
-    atomicWrite(this.file, JSON.stringify(this.cache)); return result;
   }
 }
 module.exports = { Community, Translator, parseSearch, parseBrowse, workshopId, WORKSHOP_CATEGORIES };

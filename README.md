@@ -37,7 +37,7 @@
 
 ## 下载与启动
 
-1. 打开 [Releases](https://github.com/Z1og/Safehouse/releases/latest)，下载 `Safehouse-0.1.11-win-x64.zip`。
+1. 打开 [Releases](https://github.com/Z1og/Safehouse/releases/latest)，下载 `Safehouse-0.1.12-win-x64.zip`。
 2. **完整解压 ZIP**，双击解压目录内的 `Safehouse.exe`。不要把启动器单独拿出来，也不要直接在压缩包里运行。
 3. 首次启动自动识别 Steam 游戏库；未识别时，到「偏好设置」手动选择 `Left 4 Dead 2` 目录。
 4. 拖入 VPK / ZIP，或前往「创意工坊」订阅内容，即可开始使用。
@@ -71,7 +71,7 @@
 - 不支持 RAR / 7z / 裸 BSP / SourceMod 插件导入。分卷 VPK 不支持在客户端安装或删除。
 - 单文件上限 2 GiB，ZIP 总解压上限 4 GiB；会检查包结构，不覆盖已有内容。下载地址和网络状况仍可能影响成功率。
 - Steam 缓存只读。工坊必须由 Steam 账号拥有对应游戏并能正常访问服务；下载显示实际状态，不承诺绕过 Steam 限制。
-- 界面为中文，社区内容可以翻译到所选语言。在线翻译会发送搜索词或社区公开文字；网络不可用时保留原文。
+- 界面为中文，社区内容可以翻译到所选语言。优先使用必应翻译，不可用时切换 Google；只发送搜索词或社区公开文字。成功的标题和详情分段显示，超时保留原文并提供「重试翻译」，始终可以切换查看原文。
 - 没有自动更新、云同步或 GameMaps 客户端接入。中心控制台里的功能由所接入面板提供。
 
 ## 交流群
@@ -100,6 +100,7 @@ npm run smoke:console-search
 npm run smoke:panel-download
 npm run smoke:server-connection
 npm run smoke:localization
+npm run smoke:translation
 npm run licenses
 npm run pack
 ```

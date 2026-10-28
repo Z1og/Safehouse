@@ -63,6 +63,8 @@ function browserExecutable() {
     server.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
     browser = await chromium.launch({ executablePath: browserExecutable(), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, colorScheme: 'light' });
+    // Ordinary renderer checks must not depend on Steam's decorative image CDN.
+    if (!docsDir) await context.route('https://shared.fastly.steamstatic.com/**', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="180"><path fill="#738c7c" d="M0 0h960v180H0z"/></svg>' }));
     await context.exposeBinding('safehouseInvoke', async (_, method, args) => {
       if (!Object.hasOwn(bridge, method)) throw new Error('Unknown fixture method');
       try { return await bridge[method](...args); }

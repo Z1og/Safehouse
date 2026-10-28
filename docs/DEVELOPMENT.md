@@ -4,7 +4,7 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 
 ## 直接运行
 
-完整解压 `Safehouse-0.1.10-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
+完整解压 `Safehouse-0.1.12-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
 
 0.1.2 修正本机发布目录继承的 Low mandatory label：旧 EXE 实际以低完整性运行，写入 AppData 被 Windows 拒绝，因此看起来需要管理员权限。打包脚本仅将自己生成的启动器和应用 EXE 标记为 Medium，不修改工作区或系统目录 ACL，不关闭 UAC。ZIP 不携带 NTFS 完整性标签；建议完整解压到正常的用户文件夹。
 
@@ -80,13 +80,20 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 - `safehouse:downloadsChanged` 用于字节进度，避免每次进度变更都执行库扫描。任务状态变化仍正常刷新完整状态；后台空闲轮询不再无条件触发刷新。
 - `npm run smoke:localization` 使用临时游戏目录和模拟 Steam 接口，验证单项/批量本地化、取消订阅保留、模拟 Steam 清理、重启恢复、失败下载回收站清理及原始导入文件保留。
 
+## 翻译可靠性（0.1.12）
+
+- `core/translator.js` 优先使用必应的公开网页翻译服务，失败时切换 Google；必应的临时网页验证参数只保存在内存中，由 Electron 会话维护该服务的 Cookie，不要求登录或保存账号凭据。
+- 通过 Promise 总时限和 AbortController 同时约束整个请求，包括响应正文；长文按段处理并共享总时限，两路分段并发。默认最多等待 12 秒，搜索关键词沿用 4.5 秒预算。相同文本的并发调用复用请求，成功结果保留兼容的本机缓存；失败服务退避 30 秒，手动重试可立即重新连接。
+- 卡片标题完成后局部更新；详情标题与说明分别展示，部分失败不丢弃成功译文，失败时可重试及查看原文。关闭和切换详情使用请求标识丢弃过期结果。
+- `npm run smoke:translation` 使用真实 Electron IPC 和模拟的服务响应验证标题即时显示、详情翻译、原文切换、失败重试、部分成功和过期结果隔离；`tests/translation.test.js` 覆盖服务切换、缓存、总超时、响应正文卡住、长文及重试恢复。
+
 ## Steam、下载和翻译的实际行为
 
 管理器启动后直接读取本机 Steam 安装目录下的 `config/loginusers.vdf`，显示最近使用的本地账号。Steam 未运行时可以从设置页打开 Steam；管理器不要求输入密码、不嵌入 Steam 登录页，也不保存网页会话。
 
 工坊卡片和详情提供「订阅」「重新下载 / 更新」「取消订阅」，当前页面显示 Steam 返回的真实字节进度。通过 Steamworks UGC 使用本机正在登录的账号；Steam 必须运行且该账号拥有求生之路 2，不需要管理器网页登录或 Steam Web Cookie。Steam 完成下载后，管理器校验 VPK 并复制到游戏 addons，命名为 `safehouse-workshop-工坊ID.vpk`。L4D2 的 `_legacy.bin` 同样按 VPK 结构校验，不按扩展名盲信。安装完成才标记完成；等待阶段不伪造进度。取消订阅会停止任务并卸载对应本地副本。重复安装相同文件不重复复制，遇到不同内容的同名文件保留现有文件并显示失败。
 
-社区请求和 Google 翻译服务需要网络。翻译只发送输入的搜索词或所选社区公开文字，结果保存在本机；服务不可用时保留原文并显示错误。工坊公开内容的可见性取决于 Steam 社区网络状态。常规自动化验证使用临时游戏目录和模拟账号状态；`node tests/workshop-live.cjs` 为真实 Steam 集成验证，会临时订阅指定的小体积公开项目并在结束时取消新增订阅，只安装到临时游戏目录。
+社区请求和必应 / Google 翻译服务需要网络。翻译只发送输入的搜索词或所选社区公开文字，结果保存在本机；服务不可用时保留原文并显示错误。工坊公开内容的可见性取决于 Steam 社区网络状态。常规自动化验证使用临时游戏目录和模拟账号状态；`node tests/workshop-live.cjs` 为真实 Steam 集成验证，会临时订阅指定的小体积公开项目并在结束时取消新增订阅，只安装到临时游戏目录。
 
 ## 首版边界
 
@@ -116,6 +123,7 @@ npm run smoke:taxonomy
 npm run smoke:console-search
 npm run smoke:panel-download
 npm run smoke:server-connection
+npm run smoke:translation
 npm run pack
 ```
 

@@ -40,7 +40,7 @@ const { types, groups: categoryGroups, targets: targetCatalog } = window.Safehou
 const sources = { local: '本地导入', workshop: 'Steam 工坊', cache: 'Steam 缓存' };
 let state, page = 'library', filter = 'all', subfilter = 'all', slotFilter = 'all', repeatedOnly = false, query = '', sort = 'updated', layout = 'grid', selected = new Set(), busy = false;
 let workshop = { items: [], query: '', page: 1, category: 'all', subcategory: 'all', hasMore: false, loading: false, error: '', loaded: false, generation: 0, translationError: '' };
-let detail, detailRequest = 0, detailTranslated = null, showOriginal = false, toastTimer, pendingRefresh = false;
+let detail, detailRequest = 0, detailTranslationRequest = 0, detailTranslated = null, showOriginal = false, toastTimer, pendingRefresh = false;
 const uiLanguages = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', de: 'Deutsch', fr: 'Français', ru: 'Русский', es: 'Español', pt: 'Português', th: 'ไทย' };
 const workshopCategories = Object.entries(window.SafehouseWorkshopCatalog.categories).filter(([id]) => id !== 'campaign').map(([id, value]) => [id, value.label]);
 const activeStatuses = ['queued', 'installing', 'validating', 'steam', 'downloading'];
@@ -253,13 +253,26 @@ async function loadWorkshop() {
       await Promise.all(Array.from({ length: 3 }, async () => {
         while (waiting.length && generation === workshop.generation) {
           const item = waiting.shift();
-          try { const result = await call('translate', item.title); if (generation === workshop.generation) item.translatedTitle = result.text; }
-          catch (error) { if (generation === workshop.generation) workshop.translationError = error.message; }
+          try { const result = await call('translate', item.title); if (generation === workshop.generation) { item.translatedTitle = result.text; updateWorkshopTranslation(item); } }
+          catch (error) { if (generation === workshop.generation) { workshop.translationError = error.message; updateWorkshopTranslation(); } }
         }
       }));
       if (generation === workshop.generation) renderWorkshopContent();
     }
   } catch (error) { if (generation === workshop.generation) { workshop.loading = false; workshop.error = error.message; renderWorkshopContent(); } }
+}
+function updateWorkshopTranslation(item) {
+  if (page !== 'workshop') return;
+  if (item) {
+    const title = document.querySelector(`.card-title[data-community="true"][data-detail="${CSS.escape(item.id)}"]`);
+    if (title) {
+      title.textContent = item.translatedTitle;
+      if (item.translatedTitle !== item.title && !title.parentElement.querySelector('.card-original')) {
+        const original = document.createElement('p'); original.className = 'card-original'; original.title = item.title; original.textContent = item.title; title.after(original);
+      }
+    }
+  }
+  if (workshop.translationError && !document.querySelector('#workshop-content .notice')) document.querySelector('#workshop-content')?.insertAdjacentHTML('afterbegin', `<div class="notice">${icon('translate')}<span>部分内容保留原文：${escape(workshop.translationError)}</span></div>`);
 }
 function renderTransfers() {
   const container = document.querySelector('#transfer-panel'); if (!container) return;
@@ -314,7 +327,7 @@ function cardTransfer(item, community) {
 function renderSettings() {
   main.innerHTML = heading('偏好设置', '让安全屋按照你的习惯运转。') + `<section class="section-card"><div class="section-card-heading">${icon('folder')}<h3>游戏与内容目录</h3></div><div class="preference"><div><b>求生之路 2 安装目录</b><p>${escape(state.gameRoot || '尚未连接游戏目录')}</p></div>${button('自动识别', 'scan', 'refresh', 'small')}${button('选择目录', 'choose-game', 'folder', 'small')}</div>${state.paths.length ? `<div class="path-list">${state.paths.map(value => `<div>${escape(value)}</div>`).join('')}</div>` : ''}${state.discoveryWarnings.length ? `<div class="path-list">${state.discoveryWarnings.map(value => `<p>${escape(value)}</p>`).join('')}</div>` : ''}</section>
     <section class="section-card"><div class="section-card-heading">${icon('steam')}<h3>Steam 本地状态</h3></div><div class="preference"><div><b>${state.steam?.account ? escape(state.steam.account.name) : '未找到本地 Steam 账号'}</b><p>${state.steam?.account ? `SteamID · ${escape(state.steam.account.steamId)}` : '未读取到 loginusers.vdf，请先在本机登录过 Steam。'}<br>${state.steam?.running ? 'Steam 客户端正在运行' : 'Steam 客户端未运行'}<br>${state.steam?.ugc?.ready ? '订阅与下载接口已连接' : escape(state.steam?.ugc?.error || '订阅接口尚未连接')}${state.steam?.root ? `<br>Steam 根目录 · ${escape(state.steam.root)}` : ''}</p></div>${state.steam?.running ? '' : button('打开 Steam', 'open-steam', 'steam', 'small primary')}</div></section>
-    <section class="section-card"><div class="section-card-heading">${icon('translate')}<h3>语言与翻译</h3></div><div class="preference"><div><b>自动翻译社区内容</b><p>标题和详情自动翻译，始终可以查看原文。<br>在线翻译使用 Google 翻译服务，会发送社区公开文字；网络不可用时显示原文和失败原因。</p></div><button class="switch large" role="switch" aria-checked="${state.settings.autoTranslate}" data-action="toggle-translation" aria-label="自动翻译社区内容"><span class="switch-track"></span></button></div><div class="preference"><div><b>翻译目标语言</b><p>首次启动跟随系统语言 · 当前系统 ${escape(state.language)}</p></div><select id="language-select" aria-label="翻译语言">${!uiLanguages[state.settings.language] ? `<option value="${escape(state.settings.language)}">系统 · ${escape(state.settings.language)}</option>` : ''}${Object.entries(uiLanguages).map(([value, name]) => `<option value="${value}" ${value === state.settings.language ? 'selected' : ''}>${name}</option>`).join('')}</select></div></section>
+    <section class="section-card"><div class="section-card-heading">${icon('translate')}<h3>语言与翻译</h3></div><div class="preference"><div><b>自动翻译社区内容</b><p>标题和详情自动翻译，始终可以查看原文。<br>优先使用必应翻译，不可用时切换 Google；只发送社区公开文字和搜索词。失败会保留原文，可在详情里重试。</p></div><button class="switch large" role="switch" aria-checked="${state.settings.autoTranslate}" data-action="toggle-translation" aria-label="自动翻译社区内容"><span class="switch-track"></span></button></div><div class="preference"><div><b>翻译目标语言</b><p>首次启动跟随系统语言 · 当前系统 ${escape(state.language)}</p></div><select id="language-select" aria-label="翻译语言">${!uiLanguages[state.settings.language] ? `<option value="${escape(state.settings.language)}">系统 · ${escape(state.settings.language)}</option>` : ''}${Object.entries(uiLanguages).map(([value, name]) => `<option value="${value}" ${value === state.settings.language ? 'selected' : ''}>${name}</option>`).join('')}</select></div></section>
     <section class="section-card"><div class="section-card-heading">${icon('sun')}<h3>外观</h3></div><div class="preference"><div><b>应用主题</b><p>Miuix / HyperOS 设计风格，柔和表面与蓝色强调色。</p></div><select id="theme-select" aria-label="应用主题">${[['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, name]) => `<option value="${value}" ${state.settings.theme === value ? 'selected' : ''}>${name}</option>`).join('')}</select></div></section><p class="info-line">Safehouse v${escape(state.version)} · 为热爱求生之路的你而做。<br><button data-action="project-repository">GitHub 源码与更新</button> · © 2026 Z1og · 非商业使用，商用需授权。<br>界面参考 <button data-action="open-miuix">Miuix</button>，以 Electron 实现桌面交互。与 Valve / Steam 无隶属关系。</p>`;
 }
 async function showDetail(id, isCommunity = false) {
@@ -328,19 +341,40 @@ async function showDetail(id, isCommunity = false) {
     if (request !== detailRequest || !dialog.open) return;
     if (!item) throw new Error('内容不存在，请刷新后重试');
     detail = { ...item, community: isCommunity }; renderDetail();
-    if (isCommunity && state.settings.autoTranslate) {
-      const current = detail;
-      try {
-        const [title, description] = await Promise.all([call('translate', item.title), item.description ? call('translate', item.description) : Promise.resolve({ text: '' })]);
-        if (detail === current) { detailTranslated = { title: title.text, description: description.text }; renderDetail(); }
-      } catch (error) { if (detail === current) { detail.translationError = error.message; renderDetail(); } }
-    }
+    if (isCommunity && state.settings.autoTranslate) await translateDetail();
   } catch (error) { if (request === detailRequest && dialog.open) content.innerHTML = `<div class="detail-body">${empty('warning', '无法打开内容', escape(error.message))}</div>`; }
+}
+async function translateDetail(retry = false) {
+  if (!detail?.community) return;
+  const current = detail, request = ++detailTranslationRequest;
+  current.translating = true; current.translationError = ''; current.translationLanguage = state.settings.language; renderDetail();
+  const errors = [];
+  const active = () => detail === current && request === detailTranslationRequest && document.querySelector('#details-dialog').open;
+  try {
+    await Promise.all(['title', 'description'].filter(field => current[field]?.trim()).map(async field => {
+      try {
+        const result = await call('translate', current[field], { retry });
+        if (!active()) return;
+        detailTranslated ||= { title: current.title, description: current.description };
+        detailTranslated[field] = result.text;
+        current.translationProvider = result.provider || current.translationProvider;
+        renderDetail();
+      } catch (error) { errors.push(error.message); }
+    }));
+  } finally {
+    if (active()) { current.translating = false; current.translationError = [...new Set(errors)].join('；'); renderDetail(); }
+  }
+}
+function detailTranslationMarkup() {
+  const status = detail.translating ? `${'<span class="spinner small"></span>'}${detailTranslated ? '部分内容已翻译，正在继续…' : '正在翻译…'}`
+    : detail.translationError ? `${detailTranslated ? '部分内容保留原文' : '保留原文'}：${escape(detail.translationError)} <button data-action="retry-translation">重试翻译</button>`
+    : detailTranslated ? `已翻译为 ${escape(detail.translationLanguage || state.settings.language)}${detail.translationProvider ? ` · ${escape(detail.translationProvider === 'Bing' ? '必应' : detail.translationProvider)}` : ''}` : '保留原文';
+  return `<div class="detail-translation">${icon('translate')}<span>${status}</span>${detailTranslated ? `<button data-action="toggle-original">${showOriginal ? '查看翻译' : '查看原文'}</button>` : ''}</div>`;
 }
 function renderDetail() {
   if (!detail) return;
   const translated = detailTranslated && !showOriginal;
-  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? `<div class="detail-translation">${icon('translate')}${detailTranslated ? `已翻译为 ${escape(state.settings.language)} <button data-action="toggle-original">${showOriginal ? '查看翻译' : '查看原文'}</button>` : detail.translationError ? `保留原文：${escape(detail.translationError)}` : '<span class="spinner small"></span>正在翻译…'}</div>` : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
+  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? detailTranslationMarkup() : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
   if (!detail.community && (detail.workshopId || detail.localized)) {
     document.querySelector('#details-content .detail-footer').insertAdjacentHTML('beforebegin', '<p class="info-line localization-help">本地化会创建独立 VPK，停用对应工坊副本；取消订阅后仍保留。副本不随工坊自动更新，可像普通本地 Mod 一样启停、删除。</p>');
   }
@@ -406,6 +440,7 @@ const actions = {
   'local-detail': element => showDetail(element.dataset.id),
   'close-dialog': () => { document.querySelector('#details-dialog').close(); detail = null; },
   'toggle-original': () => { showOriginal = !showOriginal; renderDetail(); },
+  'retry-translation': () => translateDetail(true),
   'open-community': () => call('open', 'https://steamcommunity.com/app/550/workshop/'),
   'open-miuix': () => call('open', 'https://compose-miuix-ui.github.io/miuix/zh_CN/'),
   'project-group': async () => { const group = await call('copyGroup'); toast(`QQ群号 ${group} 已复制，在 QQ 搜索加入`); },

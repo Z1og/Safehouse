@@ -159,7 +159,7 @@ test('UGC rejects a foreign app before subscribing and passes Steam byte progres
 });
 test('translation caches the result by language and never fabricates a failed result', async t => {
   const root = fixture(t); let calls = 0;
-  const translator = new Translator({ file: path.join(root, 'cache.json'), fetch: async () => { calls++; return new Response(JSON.stringify([[['测试', 'test']], null, 'en'])); } });
+  const translator = new Translator({ file: path.join(root, 'cache.json'), fetch: async url => { if (new URL(url).hostname === 'cn.bing.com') return new Response('', { status: 503 }); calls++; return new Response(JSON.stringify([[['测试', 'test']], null, 'en'])); } });
   assert.equal((await translator.translate('test', 'zh-CN')).text, '测试'); await translator.translate('test', 'zh-CN'); assert.equal(calls, 1);
   translator.fetch = async () => new Response('', { status: 503 }); await assert.rejects(translator.translate('another', 'zh-CN'), /503/);
 });
