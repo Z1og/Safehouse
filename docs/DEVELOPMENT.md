@@ -4,9 +4,9 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 
 ## 安装与直接运行
 
-推荐双击 `Safehouse-Setup-0.1.15-x64.exe`。NSIS 安装器使用当前用户模式，不请求提权，可选择目录并创建开始菜单 / 桌面快捷方式；默认位于当前用户的 Programs 目录。卸载仅移除应用和快捷方式，保留 `%APPDATA%\Safehouse` 与游戏文件。升级继续使用原安装目录。
+推荐双击 `Safehouse-Setup-0.1.16-x64.exe`。NSIS 安装器使用当前用户模式，不请求提权，可选择目录并创建开始菜单 / 桌面快捷方式；默认位于当前用户的 Programs 目录。卸载仅移除应用和快捷方式，保留 `%APPDATA%\Safehouse` 与游戏文件。升级继续使用原安装目录。
 
-完整解压 `Safehouse-0.1.15-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
+完整解压 `Safehouse-0.1.16-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
 
 0.1.2 修正本机发布目录继承的 Low mandatory label：旧 EXE 实际以低完整性运行，写入 AppData 被 Windows 拒绝，因此看起来需要管理员权限。打包脚本仅将自己生成的启动器和应用 EXE 标记为 Medium，不修改工作区或系统目录 ACL，不关闭 UAC。ZIP 不携带 NTFS 完整性标签；建议完整解压到正常的用户文件夹。
 
@@ -141,6 +141,10 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 
 ## 开发与验证
 
+`core/collections.js` 通过 Steam 官方公开 browse 的 `section=collections&childpublishedfileid=...` 查询所属合集，严格校验 SSR 查询键、App 550、合集类型及直接成员关系。正向成员使用 `ISteamRemoteStorage/GetCollectionDetails/v1/`，每页最多批量请求 30 项 `GetPublishedFileDetails`；保留作者顺序，隐藏 / 删除 / 跨游戏成员以不可用项目展示，嵌套合集只提供展开入口。缓存 3 分钟、最多 120 条，并合并并发请求；失败不缓存。只在打开弹窗时查询，不在卡片渲染时逐项联网。
+
+合集弹窗有独立请求序号，关闭或切换后丢弃旧响应；分页支持点击及输入，后台状态刷新保留输入焦点。成员操作复用现有订阅、卸载与本地副本详情流程，不执行批量变更。`smoke:collections` 使用隔离 Steam fixture 验证操作；`live:collections` 使用临时用户 / 游戏目录只读查询真实公开合集，不修改 Steam 订阅。
+
 在 `desktop` 目录运行（Node.js 22 或更新版本）：
 
 ```powershell
@@ -156,6 +160,7 @@ npm run smoke:console-login
 npm run smoke:server-connection
 npm run smoke:translation
 npm run smoke:favorites
+npm run smoke:collections
 npm run smoke:updates
 npm run pack
 ```

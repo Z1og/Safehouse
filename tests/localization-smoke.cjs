@@ -71,6 +71,9 @@ const { runtime } = require('../scripts/runtime.cjs');
     }
     await page.getByRole('button', { name: '本地化所选', exact: true }).click();
     await page.waitForFunction(async () => (await window.safehouse.state()).data.items.filter(item => item.localized).length === 3);
+    // Let the renderer finish the localization task before simulating external
+    // Steam cleanup. Otherwise cleanup can race the operation's final refresh.
+    await page.waitForFunction(() => !busy && !pendingRefresh && document.querySelectorAll('.localization-badge').length === 3);
     fs.rmSync(path.join(addons, 'workshop', '9876543210456.vpk'));
     fs.rmSync(path.join(addons, 'safehouse-workshop-9876543210789.vpk'));
     await page.locator('[data-action="scan"]').first().click();

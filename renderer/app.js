@@ -44,6 +44,7 @@ let state, page = 'library', filter = 'all', subfilter = 'all', slotFilter = 'al
 let workshop = { items: [], query: '', page: 1, category: 'all', subcategory: 'all', hasMore: false, loading: false, error: '', loaded: false, generation: 0, translationError: '' };
 let favoriteView = { query: '', category: 'all', subcategory: 'all', target: 'all', page: 1 };
 let detail, detailRequest = 0, detailTranslationRequest = 0, detailTranslated = null, showOriginal = false, toastTimer, pendingRefresh = false;
+let collectionView = null, collectionRequest = 0;
 const uiLanguages = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', de: 'Deutsch', fr: 'Français', ru: 'Русский', es: 'Español', pt: 'Português', th: 'ไทย' };
 const workshopCategories = Object.entries(window.SafehouseWorkshopCatalog.categories).filter(([id]) => id !== 'campaign').map(([id, value]) => [id, value.label]);
 const activeStatuses = ['queued', 'installing', 'validating', 'steam', 'downloading'];
@@ -122,6 +123,7 @@ async function refresh(renderPage = true) {
     if (renderPage || steamChanged) render();
     else { renderTransfers(); if (page === 'workshop') renderWorkshopContent(); if (page === 'favorites') renderFavoritesContent(); }
     if (detail) renderDetail();
+    if (collectionView) renderCollections();
     if (steamChanged && page === 'workshop') loadWorkshop();
   }
   finally { pendingRefresh = false; }
@@ -191,7 +193,7 @@ function card(item, community = false) {
   const targetTags = !community && targets.length ? `<div class="target-tags">${targets.slice(0, 4).map(target => `<button class="target-tag" data-action="view-target" data-target="${target.id}" title="查看所有替换 ${escape(target.label)} 的内容">${escape(target.label)}</button>`).join('')}${targets.length > 4 ? `<span class="target-tag">+${targets.length - 4} 个目标</span>` : ''}</div>` : '';
   const shared = community || item.source === 'cache' ? [] : targets.filter(target => replacementSlot(target) && counts.get(target.id)?.enabled > 1);
   const sharedTag = shared.length ? `<button class="same-target-badge" data-action="view-target" data-target="${shared[0].id}" title="同目标多项启用仅提示替换范围重叠，打开后可逐项禁用对照">同目标已启用 ${counts.get(shared[0].id).enabled} 项</button>` : '';
-  return `<article class="content-card ${selected.has(item.id) && !community ? 'selected' : ''}"><div class="cover ${escape(item.type || 'mod')}" data-detail="${item.id}" data-community="${community}">${item.image ? `<img src="${escape(item.image)}" alt="" loading="lazy">` : icon(item.type === 'mod' ? 'package' : item.type || 'package')}${!community && item.source !== 'cache' ? `<label class="card-select" aria-label="选择 ${escape(item.title)}"><input type="checkbox" data-select="${item.id}" ${selected.has(item.id) ? 'checked' : ''}></label>` : ''}<span class="tag">${community ? '创意工坊' : types[item.type] || '未识别内容'}</span></div><div class="card-content"><button class="card-title" title="${escape(item.title)}" data-detail="${item.id}" data-community="${community}">${escape(item.translatedTitle || item.title)}</button>${item.translatedTitle && item.translatedTitle !== item.title ? `<p class="card-original" title="${escape(item.title)}">${escape(item.title)}</p>` : ''}<p class="card-subtitle">${community ? escape(item.author || `工坊 ID · ${item.id}`) : item.error ? `读取失败 · ${escape(item.error)}` : `${escape(item.author)}<span> · </span>${bytes(item.size)}`}</p>${community ? workshopTagMarkup(item) : targetTags}${sharedTag}${page === 'favorites' ? '' : cardTransfer(item, community)}<div class="card-actions">${community && page === 'favorites' ? favoriteControl(item, true) : localizationControl(item, community) + subscriptionControls(item, community) + (community ? favoriteControl(item) : '')}<button class="button small" data-detail="${item.id}" data-community="${community}">${icon('info')}详情</button></div><div class="card-bottom"><span class="source-label">${icon(community || item.source !== 'local' ? 'steam' : 'folder')}${community ? 'Steam Workshop' : item.localized ? '本地化副本' : sources[item.source]}</span>${community ? '' : item.source === 'cache' ? '<span class="source-label">等待同步</span>' : `<button class="switch" role="switch" aria-checked="${item.enabled}" aria-label="${item.enabled ? '禁用' : '启用'} ${escape(item.title)}" data-toggle="${item.id}">${item.enabled ? '已启用' : '已禁用'}<span class="switch-track"></span></button>`}</div></div></article>`;
+  return `<article class="content-card ${selected.has(item.id) && !community ? 'selected' : ''}"><div class="cover ${escape(item.type || 'mod')}" data-detail="${item.id}" data-community="${community}">${item.image ? `<img src="${escape(item.image)}" alt="" loading="lazy">` : icon(item.type === 'mod' ? 'package' : item.type || 'package')}${!community && item.source !== 'cache' ? `<label class="card-select" aria-label="选择 ${escape(item.title)}"><input type="checkbox" data-select="${item.id}" ${selected.has(item.id) ? 'checked' : ''}></label>` : ''}<span class="tag">${community ? '创意工坊' : types[item.type] || '未识别内容'}</span></div><div class="card-content"><button class="card-title" title="${escape(item.title)}" data-detail="${item.id}" data-community="${community}">${escape(item.translatedTitle || item.title)}</button>${item.translatedTitle && item.translatedTitle !== item.title ? `<p class="card-original" title="${escape(item.title)}">${escape(item.title)}</p>` : ''}<p class="card-subtitle">${community ? escape(item.author || `工坊 ID · ${item.id}`) : item.error ? `读取失败 · ${escape(item.error)}` : `${escape(item.author)}<span> · </span>${bytes(item.size)}`}</p>${community ? workshopTagMarkup(item) : targetTags}${sharedTag}${page === 'favorites' ? '' : cardTransfer(item, community)}<div class="card-actions">${community && page === 'favorites' ? favoriteControl(item, true) : localizationControl(item, community) + subscriptionControls(item, community) + (community ? favoriteControl(item) : '')}${collectionControl(item, community)}<button class="button small" data-detail="${item.id}" data-community="${community}">${icon('info')}详情</button></div><div class="card-bottom"><span class="source-label">${icon(community || item.source !== 'local' ? 'steam' : 'folder')}${community ? 'Steam Workshop' : item.localized ? '本地化副本' : sources[item.source]}</span>${community ? '' : item.source === 'cache' ? '<span class="source-label">等待同步</span>' : `<button class="switch" role="switch" aria-checked="${item.enabled}" aria-label="${item.enabled ? '禁用' : '启用'} ${escape(item.title)}" data-toggle="${item.id}">${item.enabled ? '已启用' : '已禁用'}<span class="switch-track"></span></button>`}</div></div></article>`;
 }
 function renderLibraryContent() {
   const content = document.querySelector('#library-content'); if (!content) return;
@@ -361,6 +363,73 @@ function jobDeleteControl(job) {
   return button(label, 'delete-download', 'trash', 'small danger', `data-id="${job.id}" title="${job.kind === 'panel' ? '下载残留移至回收站并删除任务记录' : '仅删除任务记录，保留原始文件和模组'}"`);
 }
 function workshopKey(item, community = false) { return community ? item.id : item.workshopId || ''; }
+function collectionControl(item, community = false) {
+  const id = workshopKey(item, community) || item.originWorkshopId;
+  return id ? button('所属合集', 'open-collections', 'library', 'small', `data-id="${escape(id)}" title="查看包含此模组的公开合集及其成员"`) : '';
+}
+async function showCollections(id) {
+  if (document.querySelector('#details-dialog').open) document.querySelector('#details-dialog').close();
+  const item = state.items.find(item => item.workshopId === id || item.originWorkshopId === id) || workshop.items.find(item => item.id === id) || state.favorites?.find(item => item.id === id);
+  collectionView = { childId: id, title: item?.title || `工坊项目 ${id}`, mode: 'parents', page: 1, stack: [], result: null, loading: false, error: '' };
+  const dialog = document.querySelector('#collections-dialog'); if (!dialog.open) dialog.showModal();
+  await loadCollections();
+}
+async function loadCollections() {
+  const view = collectionView; if (!view) return;
+  const request = ++collectionRequest, dialog = document.querySelector('#collections-dialog');
+  view.loading = true; view.error = ''; view.result = null; renderCollections(); dialog.scrollTop = 0;
+  try {
+    const result = await call(view.mode === 'parents' ? 'collections' : 'collectionMembers', view.mode === 'parents' ? view.childId : view.collectionId, view.page);
+    if (request !== collectionRequest || view !== collectionView || !dialog.open) return;
+    view.result = result;
+  } catch (error) { if (request === collectionRequest && view === collectionView && dialog.open) view.error = error.message; }
+  finally { if (request === collectionRequest && view === collectionView && dialog.open) { view.loading = false; renderCollections(); } }
+}
+function collectionStatus(item) {
+  if (item.unavailable) return '不可用';
+  if (item.isCollection) return '嵌套合集';
+  const installed = state.items.filter(value => value.source !== 'cache' && (value.workshopId === item.id || value.originWorkshopId === item.id));
+  const labels = [subscriptionState(item, true) === true ? '已订阅' : subscriptionState(item, true) === false ? '未订阅' : '订阅状态未连接'];
+  labels.push(installed.length ? installed.some(value => value.enabled) ? '已安装 · 已启用' : '已安装 · 已禁用' : '未安装到模组管理');
+  if (state.localizedWorkshopIds?.includes(item.id)) labels.push('本地化副本已保留');
+  return labels.join(' / ');
+}
+function collectionLocalControl(item) {
+  const local = state.items.find(value => value.source !== 'cache' && (value.workshopId === item.id || value.originWorkshopId === item.id));
+  return local ? button('管理本地副本', 'collection-local', 'folder', 'small', `data-id="${escape(local.id)}"`) : '';
+}
+function renderCollections() {
+  const view = collectionView, dialog = document.querySelector('#collections-dialog'); if (!view || !dialog.open) return;
+  const pageInput = document.activeElement?.matches('#collection-page-form input') && !view.loading ? document.activeElement.value : null;
+  const result = view.result, members = view.mode === 'members';
+  document.querySelector('#collections-heading').textContent = members ? result?.collection.title || '合集成员' : '所属合集';
+  document.querySelector('#collections-context').textContent = members ? `合集 ID · ${view.collectionId}${result ? ` · 共 ${result.total} 项` : ''}` : `${view.title} · ${view.childId}`;
+  document.querySelector('#collections-back').hidden = !members;
+  const rows = (result?.items || []).map(item => `<article class="collection-row ${members && item.id === view.childId ? 'collection-source' : ''}" data-collection-item="${escape(item.id)}">${item.image ? `<img class="collection-thumb" src="${escape(item.image)}" alt="" loading="lazy">` : `<div class="collection-thumb fallback">${icon(item.isCollection ? 'library' : 'package')}</div>`}<div class="collection-row-body"><h3>${escape(item.title)}</h3><p class="collection-row-meta">${members ? escape(collectionStatus(item)) : `${item.memberCount} 项成员 · ${escape(item.author)}`}${members && item.id === view.childId ? ' · 当前模组' : ''}</p>${members && !item.unavailable && !item.isCollection ? workshopTagMarkup(item) + cardTransfer(item, true) : ''}<div class="collection-row-actions">${item.unavailable ? `<span class="subtle">${escape(item.description)}</span>` : item.isCollection ? button('查看成员', 'collection-enter', 'library', 'small primary', `data-id="${escape(item.id)}"`) : subscriptionControls(item, true) + collectionLocalControl(item) + button('详情', 'collection-detail', 'info', 'small', `data-id="${escape(item.id)}"`)}${!item.unavailable ? button('官方页面', 'open-item', 'external', 'small', `data-id="${escape(item.id)}"`) : ''}</div></div></article>`).join('');
+  document.querySelector('#collections-content').innerHTML = `<p class="info-line collection-help">${members ? '逐项订阅会下载并安装；取消订阅会卸载工坊副本，已本地化副本保留。嵌套合集可继续展开。' : '显示公开可见、直接包含此模组的合集；同一模组可能出现在多个合集。私有或已删除的合集无法列出。'}</p>${view.loading ? '<div class="startup"><span class="spinner"></span><p>正在读取合集…</p></div>' : view.error ? empty('warning', '合集读取失败', escape(view.error), button('重试', 'collection-retry', 'refresh', 'primary')) : rows ? `<div class="collection-list">${rows}</div>` : empty('library', members ? '合集暂时没有成员' : '未找到公开所属合集', members ? '作者可能已移除合集中的项目。' : '此模组可能未加入公开合集，或所在合集不可见。')}${result ? `<div class="collection-pager"><span>${members ? '成员' : '合集'} · 第 ${view.page} / ${Math.max(1, result.totalPages)} 页</span><div class="actions">${button('上一页', 'collection-page', '', 'small', `data-number="${view.page - 1}" ${view.page <= 1 ? 'disabled' : ''}`)}${button('下一页', 'collection-page', '', 'small', `data-number="${view.page + 1}" ${!result.hasMore ? 'disabled' : ''}`)}<form id="collection-page-form"><input name="pageNumber" type="number" min="1" max="${Math.max(1, result.totalPages)}" value="${view.page}" aria-label="合集页码" required><button class="button small" type="submit">跳转</button></form></div></div>` : ''}`;
+  if (pageInput !== null) { const input = document.querySelector('#collection-page-form input'); if (input) { input.value = pageInput; input.focus({ preventScroll: true }); } }
+}
+async function collectionAction(element) {
+  const action = element.dataset.action, view = collectionView;
+  if (action === 'open-collections') return showCollections(element.dataset.id);
+  if (action === 'close-collections') { document.querySelector('#collections-dialog').close(); return; }
+  if (!view) return;
+  if (action === 'collection-detail') return showDetail(element.dataset.id, true);
+  if (action === 'collection-local') return showDetail(element.dataset.id);
+  if (action === 'collection-enter') {
+    if (!view.result?.items.some(item => item.id === element.dataset.id && item.isCollection && !item.unavailable)) return;
+    view.stack.push({ mode: view.mode, collectionId: view.collectionId, page: view.page });
+    view.mode = 'members'; view.collectionId = element.dataset.id; view.page = 1;
+  } else if (action === 'collection-back') {
+    const previous = view.stack.pop(); if (!previous) return;
+    Object.assign(view, previous);
+  } else if (action === 'collection-page') {
+    const number = Number(element.dataset.number);
+    if (!Number.isInteger(number) || number < 1 || number > Math.max(1, view.result?.totalPages || 0) || number === view.page) return;
+    view.page = number;
+  } else if (action !== 'collection-retry') return;
+  return loadCollections();
+}
 function localizedWorkshop(item, community = false) {
   const id = workshopKey(item, community);
   return Boolean(id && state.localizedWorkshopIds?.includes(id));
@@ -454,7 +523,7 @@ function detailTranslationMarkup() {
 function renderDetail() {
   if (!detail) return;
   const translated = detailTranslated && !showOriginal;
-  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? detailTranslationMarkup() : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? favoriteControl(detail, page === 'favorites') : ''}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
+  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? detailTranslationMarkup() : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${collectionControl(detail, detail.community)}${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? favoriteControl(detail, page === 'favorites') : ''}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
   if (!detail.community && (detail.workshopId || detail.localized)) {
     document.querySelector('#details-content .detail-footer').insertAdjacentHTML('beforebegin', '<p class="info-line localization-help">本地化会创建独立 VPK，停用对应工坊副本；取消订阅后仍保留。副本不随工坊自动更新，可像普通本地 Mod 一样启停、删除。</p>');
   }
@@ -565,6 +634,7 @@ document.addEventListener('click', event => {
   const navigation = event.target.closest('[data-page]');
   if (navigation) { page = navigation.dataset.page; render(); main.scrollTop = 0; if (page === 'workshop' && !workshop.loaded) loadWorkshop(); return; }
   if (event.target.closest('.card-select')) return;
+  const collectionButton = event.target.closest('[data-action]'); if (collectionButton && (['open-collections', 'close-collections'].includes(collectionButton.dataset.action) || collectionButton.dataset.action.startsWith('collection-'))) { collectionAction(collectionButton).catch(error => toast(error.message)); return; }
   const action = event.target.closest('[data-action]'); if (action && actions[action.dataset.action]) { task(() => actions[action.dataset.action](action)); return; }
   const category = event.target.closest('[data-filter]'); if (category) { filter = category.dataset.filter; subfilter = 'all'; slotFilter = 'all'; renderLibrary(); document.querySelector('.filterbar')?.scrollIntoView({ block: 'start' }); return; }
   const subcategory = event.target.closest('[data-subfilter]'); if (subcategory) { subfilter = subcategory.dataset.subfilter; slotFilter = 'all'; renderLibrary(); return; }
@@ -590,6 +660,7 @@ document.addEventListener('change', event => {
   if (target.id === 'theme-select' || target.id === 'language-select') savePreferences({ [target.id === 'theme-select' ? 'theme' : 'language']: target.value }).catch(error => toast(error.message));
 });
 document.addEventListener('submit', event => {
+  if (event.target.id === 'collection-page-form') { event.preventDefault(); if (event.target.reportValidity()) collectionAction({ dataset: { action: 'collection-page', number: event.target.elements.pageNumber.value } }).catch(error => toast(error.message)); return; }
   if (event.target.dataset.pageJump) { event.preventDefault(); const form = event.target; if (form.reportValidity()) task(() => goPage(form.dataset.pageJump, form.elements.pageNumber.value)); }
   if (event.target.id === 'favorites-form') event.preventDefault();
   if (event.target.id === 'workshop-form') { event.preventDefault(); workshop.query = document.querySelector('#workshop-search').value.trim(); workshop.page = 1; loadWorkshop(); }
@@ -599,6 +670,8 @@ document.addEventListener('submit', event => {
 document.querySelector('#details-dialog').addEventListener('click', event => { if (event.target === event.currentTarget) { const box = event.currentTarget.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) { event.currentTarget.close(); detail = null; } } });
 document.querySelector('#details-dialog').addEventListener('cancel', () => { detail = null; });
 document.querySelector('#details-dialog').addEventListener('close', () => { detailRequest++; detail = null; });
+document.querySelector('#collections-dialog').addEventListener('close', () => { collectionRequest++; collectionView = null; });
+document.querySelector('#collections-dialog').addEventListener('cancel', () => { collectionRequest++; collectionView = null; });
 let dragDepth = 0;
 document.addEventListener('dragenter', event => { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) { dragDepth++; document.querySelector('#drop-overlay').classList.add('visible'); } });
 document.addEventListener('dragover', event => event.preventDefault());
@@ -616,6 +689,7 @@ if (api) {
     if (!state || !Array.isArray(downloads)) return;
     state.downloads = downloads;
     renderTransfers();
+    if (collectionView) renderCollections();
   });
   api.onUpdateChanged?.(value => { updateState = value; if (page === 'settings') renderAppUpdate(); });
   api.onConsoleChanged?.(value => { consoleState = value; renderServerConnection(); if (page === 'console') renderConsoleStatus(); if (value.notice) toast(value.notice); });

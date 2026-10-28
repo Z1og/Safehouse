@@ -8,6 +8,7 @@ const { PanelDownloads } = require('./core/panel-downloads');
 const { Localizations } = require('./core/localization');
 const { Favorites } = require('./core/favorites');
 const { Community, Translator } = require('./core/community');
+const { Collections } = require('./core/collections');
 const { readLocalSteamState } = require('./core/steam');
 const { Workshop } = require('./core/workshop');
 const { unsubscribeAndUninstall } = require('./core/subscriptions');
@@ -26,7 +27,7 @@ app.setPath('sessionData', profileDirectory);
 if (!app.requestSingleInstanceLock()) app.quit();
 let mainWindow, library, downloads, community, translator, settings, settingsFile, discovery, workshop;
 let operation = false;
-let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations, favorites, updates;
+let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations, favorites, updates, collections;
 const rendererPath = path.join(__dirname, 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
 const notify = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:changed'); };
@@ -157,6 +158,9 @@ app.whenReady().then(async () => {
   bind('panelInstall', id => { if (operation) throw new Error('正在处理文件操作'); return panelDownloads.install(id); });
   bind('panelReveal', id => shell.showItemInFolder(panelDownloads.file(id)));
   bind('details', async id => { const item = await community.details(id); let subscription = {}; try { subscription = workshop.snapshot(item.id); } catch { } return { ...item, ...subscription }; });
+  collections = new Collections({ community });
+  bind('collections', (id, page) => collections.parents(id, page));
+  bind('collectionMembers', (id, page) => collections.members(id, page));
   bind('subscribe', async id => {
     if (operation) throw new Error('正在处理文件操作，请稍候');
     library.addonDir;

@@ -1,0 +1,102 @@
+const { _electron: electron } = require('playwright-core');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { game, vpk } = require('./fixtures.cjs');
+const { runtime } = require('../scripts/runtime.cjs');
+
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'safehouse-collections-'));
+  const { gameRoot, addons } = game(root), profile = path.join(root, 'profile'); fs.mkdirSync(profile);
+  fs.writeFileSync(path.join(addons, 'safehouse-workshop-88.vpk'), vpk({ 'addoninfo.txt': '"AddonInfo" { "addontitle" "Fixture AK-47" }', 'models/weapons/v_rifle_ak47.mdl': 'fixture' }));
+  fs.writeFileSync(path.join(addons, 'local-only.vpk'), vpk({ 'addoninfo.txt': '"AddonInfo" { "addontitle" "Local Only" }', 'maps/local.bsp': 'fixture' }));
+  fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ gameRoot, theme: 'light', language: 'zh-CN', autoTranslate: false }));
+  const env = { ...process.env, SAFEHOUSE_DATA_DIR: profile, SAFEHOUSE_DISABLE_STEAMWORKS: '1' }; delete env.ELECTRON_RUN_AS_NODE;
+  let application; const errors = [];
+  try {
+    application = await electron.launch({ executablePath: runtime(), args: process.env.SAFEHOUSE_PACKAGED === '1' ? [] : [path.join(__dirname, '..')], env });
+    const page = await application.firstWindow(); page.on('pageerror', error => errors.push(error.message));
+    await page.getByRole('heading', { name: '模组管理', exact: true }).waitFor();
+    await application.evaluate(() => {
+      const { Community } = process.mainModule.require('./core/community'), { Collections } = process.mainModule.require('./core/collections'), { Workshop } = process.mainModule.require('./core/workshop');
+      globalThis.collectionFixture = { subscribed: ['88'], calls: [], hold: false, waiting: [], fail: false };
+      const item = id => ({ id, title: `Fixture Mod ${id}`, description: 'Replaces AK-47', tags: ['Weapons', 'Rifle'], author: 'Fixture' });
+      Community.prototype.search = async () => ({ items: [item('88')], page: 1, totalPages: 1, hasMore: false });
+      Community.prototype.details = async id => item(id);
+      Collections.prototype.parents = async function (id, page = 1) {
+        if (globalThis.collectionFixture.hold) await new Promise(resolve => globalThis.collectionFixture.waiting.push(resolve));
+        if (globalThis.collectionFixture.fail) throw Error('Fixture network failure');
+        return { childId: id, items: id === '90' ? [] : [{ id: page === 1 ? '200' : '201', title: `Fixture Collection ${page}`, isCollection: true, memberCount: 32 }], page, totalPages: 2, hasMore: page < 2 };
+      };
+      Collections.prototype.members = async function (id, page = 1) {
+        return { collection: { id, title: `Collection ${id}` }, items: page === 2 ? [item('95')] : id === '202' ? [item('94')] : [item('88'), item('89'), { ...item('202'), isCollection: true }, { id: '93', title: 'Hidden project', unavailable: true }], page, total: 32, totalPages: 2, hasMore: page < 2 };
+      };
+      Workshop.prototype.status = () => ({ ready: true, subscribedIds: [...globalThis.collectionFixture.subscribed], account: { steamId: '76561190000000000', name: 'Fixture' } });
+      Workshop.prototype.snapshot = id => ({ subscribed: globalThis.collectionFixture.subscribed.includes(id), installed: false, folder: '', downloading: false, bytes: 0, total: 0 });
+      Workshop.prototype.subscribe = async id => { globalThis.collectionFixture.calls.push(['subscribe', id]); globalThis.collectionFixture.subscribed.push(id); return { ...item(id), accepted: false }; };
+      Workshop.prototype.unsubscribe = async id => { globalThis.collectionFixture.calls.push(['unsubscribe', id]); globalThis.collectionFixture.subscribed = globalThis.collectionFixture.subscribed.filter(value => value !== id); return { id, subscribed: false }; };
+    });
+    await page.locator('[data-action="scan"]').click();
+    const dialog = page.locator('#collections-dialog'), member = id => dialog.locator(`[data-collection-item="${id}"]`);
+    assert.equal(await page.locator('.content-card').filter({ hasText: 'Local Only' }).getByRole('button', { name: '所属合集' }).count(), 0);
+    await page.locator('.content-card [data-action="open-collections"]').click();
+    await member('200').waitFor(); assert.match(await dialog.textContent(), /公开可见/);
+    await dialog.getByRole('button', { name: '下一页', exact: true }).click(); await member('201').waitFor();
+    await dialog.getByRole('spinbutton', { name: '合集页码' }).fill('1'); await dialog.getByRole('spinbutton', { name: '合集页码' }).press('Enter'); await member('200').waitFor();
+    await member('200').getByRole('button', { name: '查看成员', exact: true }).click(); await member('88').waitFor();
+    assert.match(await member('88').textContent(), /已订阅.*已安装.*当前模组/);
+    assert.equal(await member('93').getByRole('button').count(), 0);
+    assert.equal(await member('202').locator('[data-action="subscribe-item"]').count(), 0);
+    await member('88').getByRole('button', { name: '管理本地副本', exact: true }).click();
+    await page.locator('#details-dialog').getByRole('button', { name: '禁用内容', exact: true }).click();
+    await page.locator('#details-dialog').getByRole('button', { name: '启用内容', exact: true }).waitFor();
+    await page.getByRole('button', { name: '关闭详情' }).click();
+    await member('88').getByText(/已安装 · 已禁用/).waitFor();
+    await member('202').getByRole('button', { name: '查看成员', exact: true }).click(); await member('94').waitFor();
+    await dialog.getByRole('button', { name: '返回上一级' }).click(); await member('88').waitFor();
+    await member('89').getByRole('button', { name: '订阅', exact: true }).click();
+    await member('89').getByRole('button', { name: '取消订阅', exact: true }).waitFor();
+    await member('89').getByRole('button', { name: '取消订阅', exact: true }).click();
+    await member('89').getByRole('button', { name: '订阅', exact: true }).waitFor();
+    assert.deepEqual(await application.evaluate(() => globalThis.collectionFixture.calls), [['subscribe', '89'], ['unsubscribe', '89']]);
+    console.log('PASS collection card, multiple parents, typed pagination, nested navigation, statuses and isolated subscribe/unsubscribe');
+    await member('88').getByRole('button', { name: '详情', exact: true }).click(); await page.locator('#details-content h2').waitFor();
+    await page.getByRole('button', { name: '关闭详情' }).click(); assert.ok(await dialog.isVisible());
+    const pageInput = dialog.getByRole('spinbutton', { name: '合集页码' });
+    await pageInput.fill('2'); const oldInput = await pageInput.elementHandle();
+    const snapshot = await page.evaluate(() => window.safehouse.state());
+    await application.evaluate(({ BrowserWindow }, jobs) => BrowserWindow.getAllWindows()[0].webContents.send('safehouse:downloadsChanged', jobs), snapshot.data.downloads);
+    await page.waitForFunction(element => !element.isConnected, oldInput);
+    assert.equal(await pageInput.inputValue(), '2'); assert.ok(await pageInput.evaluate(element => element === document.activeElement));
+    await pageInput.press('Enter'); await member('95').waitFor();
+    const output = path.join(__dirname, '../output/playwright'); fs.mkdirSync(output, { recursive: true });
+    await dialog.getByRole('button', { name: '上一页', exact: true }).click(); await member('88').waitFor();
+    await page.screenshot({ path: path.join(output, 'collections-desktop.png') });
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(980, 700));
+    await page.screenshot({ path: path.join(output, 'collections-compact.png') });
+    assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth), false);
+    await page.getByRole('button', { name: '关闭合集' }).click();
+    await application.evaluate(() => { globalThis.collectionFixture.fail = true; });
+    await page.locator('.content-card [data-action="open-collections"]').click(); await dialog.getByText('合集读取失败', { exact: true }).waitFor();
+    await application.evaluate(() => { globalThis.collectionFixture.fail = false; });
+    await dialog.getByRole('button', { name: '重试', exact: true }).click(); await member('200').waitFor();
+    await page.getByRole('button', { name: '关闭合集' }).click();
+    await application.evaluate(() => { globalThis.collectionFixture.hold = true; });
+    await page.locator('.content-card [data-action="open-collections"]').click(); await dialog.getByText('正在读取合集…').waitFor();
+    await page.getByRole('button', { name: '关闭合集' }).click();
+    await application.evaluate(() => { globalThis.collectionFixture.hold = false; globalThis.collectionFixture.waiting.splice(0).forEach(resolve => resolve()); });
+    assert.equal(await dialog.isVisible(), false);
+    await page.locator('[data-page="workshop"]').click(); await page.locator('#workshop-content .content-card').waitFor();
+    await page.locator('#workshop-content [data-action="toggle-favorite"]').click();
+    await page.locator('[data-page="favorites"]').click();
+    await page.locator('#favorites-content [data-action="open-collections"]').click(); await member('200').waitFor();
+    await page.getByRole('button', { name: '关闭合集' }).click();
+    assert.deepEqual(errors, []);
+    assert.ok(fs.existsSync(path.join(addons, 'safehouse-workshop-88.vpk')));
+    console.log('PASS details return, error retry, close during fetch, favorites entry and 980px layout; original fixture mod retained');
+  } finally {
+    if (application) { await application.evaluate(() => globalThis.collectionFixture?.waiting.splice(0).forEach(resolve => resolve())).catch(() => {}); await application.close(); }
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

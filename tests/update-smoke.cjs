@@ -15,7 +15,7 @@ const { game } = require('./fixtures.cjs');
   fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ gameRoot, theme: 'light', language: 'zh-CN', autoTranslate: false }));
   // Download-only bytes: never execute this fixture as a program.
   const payload = crypto.randomBytes(4 * 1024 * 1024), digest = crypto.createHash('sha512').update(payload).digest('base64');
-  let feedVersion = '0.1.15', broken = false, offline = false, downloads = 0, application;
+  let feedVersion = require('../package.json').version, broken = false, offline = false, downloads = 0, application;
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/latest.yml')) {
       if (offline) { res.writeHead(503); res.end(); return; }
@@ -38,6 +38,7 @@ const { game } = require('./fixtures.cjs');
     application = await electron.launch({ executablePath: runtime(), args: process.env.SAFEHOUSE_PACKAGED === '1' ? [] : [path.join(__dirname, '..')], env });
     const page = await application.firstWindow(); page.on('pageerror', error => errors.push(error.message));
     await page.getByRole('heading', { name: '模组管理', exact: true }).waitFor();
+    feedVersion = await application.evaluate(({ app }) => app.getVersion());
     await application.evaluate(() => {
       const { Updates } = process.mainModule.require('./core/updates'), { Downloads } = process.mainModule.require('./core/downloads');
       const snapshot = Updates.prototype.snapshot, list = Downloads.prototype.list;
@@ -63,7 +64,7 @@ const { game } = require('./fixtures.cjs');
     const click = action => page.locator(`[data-action="update-${action}"]`).click();
     await click('check'); await status('latest'); assert.equal(downloads, 0);
     offline = true; await click('check'); await status('error');
-    offline = false; feedVersion = '0.1.16'; broken = true;
+    offline = false; feedVersion = feedVersion.replace(/\d+$/, patch => String(Number(patch) + 1)); broken = true;
     await click('check'); await status('available'); assert.equal(downloads, 0);
     assert.equal(await page.locator('.app-update-notes img').count(), 0);
     assert.ok((await page.locator('.app-update-notes pre').textContent()).includes('<img'));

@@ -30,6 +30,7 @@
   </div>
   <div class="drop-overlay" id="drop-overlay"><div><span data-icon="package"></span><h2>放进你的安全屋</h2><p>松开以导入 VPK 或 ZIP 内容包</p></div></div>
   <dialog id="details-dialog" aria-label="内容详情"><button class="dialog-close icon-button" data-action="close-dialog" aria-label="关闭详情"><span data-icon="close"></span></button><div id="details-content"></div></dialog>
+  <dialog id="collections-dialog" aria-labelledby="collections-heading"><header class="collections-header"><div><button id="collections-back" class="button small" data-action="collection-back" hidden>返回上一级</button><h2 id="collections-heading">所属合集</h2><p id="collections-context"></p></div><button class="icon-button" data-action="close-collections" aria-label="关闭合集"><span data-icon="close"></span></button></header><div id="collections-content"></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="catalog.js"></script>
   <script src="workshop-catalog.js"></script>
