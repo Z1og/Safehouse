@@ -4,6 +4,8 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { packager } = require('@electron/packager');
+const { build, Platform } = require('electron-builder');
+const { installerConfiguration } = require('./installer.cjs');
 const yazl = require('yazl');
 const { copyTree } = require('./runtime.cjs');
 
@@ -76,7 +78,14 @@ async function cacheElectronZip(version) {
     fs.rmSync(release, { recursive: true, force: true });
   }
   fs.mkdirSync(release, { recursive: true });
+  fs.writeFileSync(path.join(appDir, 'resources', 'app-update.yml'), 'provider: github\nowner: Z1og\nrepo: Safehouse\nupdaterCacheDirName: safehouse-l4d2-updater\n');
   copyTree(appDir, path.join(release, 'app'));
+  fs.writeFileSync(path.join(appDir, 'resources', 'safehouse-installed.json'), JSON.stringify({ kind: 'nsis', appId: 'com.z1og.safehouse' }));
+  await build({ projectDir: project, prepackaged: appDir, targets: Platform.WINDOWS.createTarget('nsis'), publish: 'never', config: installerConfiguration({ output, version: metadata.version }) });
+  const installer = path.join(output, `Safehouse-Setup-${metadata.version}-x64.exe`);
+  normalUserExecutable(installer);
+  const installerSha256 = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex');
+  fs.writeFileSync(installer + '.sha256', `${installerSha256}  ${path.basename(installer)}\n`);
   const toolsRoot = path.join(process.env.LOCALAPPDATA, 'Safehouse', 'build-tools');
   const compiler = process.env.SAFEHOUSE_ZIG_BIN || (fs.existsSync(toolsRoot) ? fs.readdirSync(toolsRoot).map(name => path.join(toolsRoot, name, 'zig.exe')).find(file => fs.existsSync(file)) : '');
   if (!compiler || !fs.existsSync(compiler)) throw new Error('缺少 Zig 原生编译器；请设置 SAFEHOUSE_ZIG_BIN 为 zig.exe 的绝对路径');
@@ -102,5 +111,5 @@ async function cacheElectronZip(version) {
   if (zip.status !== 0) throw new Error(zip.stderr || 'ZIP 打包失败');
   const sha256 = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
   fs.writeFileSync(archive + '.sha256', `${sha256}  ${path.basename(archive)}\n`);
-  console.log(JSON.stringify({ buildId, appDir, release, archive, bytes: fs.statSync(archive).size, sha256 }, null, 2));
+  console.log(JSON.stringify({ buildId, appDir, release, archive, bytes: fs.statSync(archive).size, sha256, installer, installerSha256, updateFeed: path.join(output, 'latest.yml') }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; });

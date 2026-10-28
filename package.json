@@ -1,14 +1,19 @@
 {
   "name": "safehouse-l4d2",
   "productName": "Safehouse",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "description": "求生之路 2 本地地图与 Mod 管理器",
   "author": "Z1og",
   "license": "SEE LICENSE IN LICENSE",
-  "repository": { "type": "git", "url": "https://github.com/Z1og/Safehouse.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Z1og/Safehouse.git"
+  },
   "homepage": "https://github.com/Z1og/Safehouse",
-  "bugs": { "url": "https://github.com/Z1og/Safehouse/issues" },
+  "bugs": {
+    "url": "https://github.com/Z1og/Safehouse/issues"
+  },
   "main": "main.js",
   "scripts": {
     "start": "node scripts/start.cjs",
@@ -23,18 +28,22 @@
     "smoke:localization": "node tests/localization-smoke.cjs",
     "smoke:translation": "node tests/translation-smoke.cjs",
     "smoke:favorites": "node tests/favorites-smoke.cjs",
+    "smoke:updates": "node tests/update-smoke.cjs",
+    "smoke:installer": "node tests/installer-smoke.cjs",
     "capture": "node scripts/capture.cjs",
     "pack": "node scripts/pack.cjs",
     "licenses": "node scripts/licenses.cjs"
   },
   "dependencies": {
     "cheerio": "1.0.0",
+    "electron-updater": "6.8.11",
     "steamworks.js": "0.4.0",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@electron/packager": "19.0.1",
     "electron": "45.0.0",
+    "electron-builder": "26.18.0",
     "playwright-core": "1.64.1",
     "yazl": "3.3.1"
   }

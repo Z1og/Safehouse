@@ -2,9 +2,11 @@
 
 Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界面使用 Electron 与 HTML/CSS 实现，并非 Compose Miuix 组件的原生移植。
 
-## 直接运行
+## 安装与直接运行
 
-完整解压 `Safehouse-0.1.14-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
+推荐双击 `Safehouse-Setup-0.1.15-x64.exe`。NSIS 安装器使用当前用户模式，不请求提权，可选择目录并创建开始菜单 / 桌面快捷方式；默认位于当前用户的 Programs 目录。卸载仅移除应用和快捷方式，保留 `%APPDATA%\Safehouse` 与游戏文件。升级继续使用原安装目录。
+
+完整解压 `Safehouse-0.1.15-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
 
 0.1.2 修正本机发布目录继承的 Low mandatory label：旧 EXE 实际以低完整性运行，写入 AppData 被 Windows 拒绝，因此看起来需要管理员权限。打包脚本仅将自己生成的启动器和应用 EXE 标记为 Medium，不修改工作区或系统目录 ACL，不关闭 UAC。ZIP 不携带 NTFS 完整性标签；建议完整解压到正常的用户文件夹。
 
@@ -118,13 +120,24 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 - Steam 原始缓存只读；从管理器下载的 VPK 会单独安装到 addons 后提供启停与卸载。分卷 VPK 可在分卷齐全时读取，但不支持从管理器安装或卸载。
 - 应用不提供冲突检测页面；启停管理针对实际 `addonlist.txt`，损坏 VPK 会单独提示。
 - 启停与卸载后，在游戏下一次加载内容时生效；游戏运行期间可能占用文件。
-- 首版界面为中文，社区翻译目标可以跟随其他系统语言。当前没有 GameMaps、自动更新、配置导出与云同步。
+- 首版界面为中文，社区翻译目标可以跟随其他系统语言。提供手动检查和确认安装更新；暂没有 GameMaps、配置导出与云同步。
 
 ## 数据与恢复
 
 设置、安装记录和翻译缓存保存在 `%APPDATA%\Safehouse`。Steam 账号状态只读取本机 Steam 文件，不复制账号凭据。开发/测试可用 `SAFEHOUSE_DATA_DIR` 指定独立目录。卸载的文件可在 Windows 回收站恢复；安装源文件始终保留。清理已结束任务只删除队列记录，不删除已安装内容。
 
 应用运行副本通常位于 `%LOCALAPPDATA%\Safehouse\versions`；旧缓存不可写时改用 `%TEMP%\Safehouse-runtime\versions`，该运行副本可由启动器重新生成。开发运行时缓存位于 `%LOCALAPPDATA%\Safehouse\runtime`。这些目录与游戏内容和永久设置目录分开。
+
+## 安装版与客户端更新（0.1.15）
+
+- `scripts/pack.cjs` 从同一应用生成 NSIS 安装版和原生启动器便携 ZIP。安装包为当前用户安装，`scripts/installer.nsh` 固定当前用户选项；不包含提权安装选项。
+- 仅安装版含 `resources/safehouse-installed.json`。两种发行模式都使用原有固定 `%APPDATA%\Safehouse`，安装目录和更新缓存不存放设置、收藏或登录信息。
+- `core/updates.js` 包装 `electron-updater` 的 `NsisUpdater`，由明确的 IPC 检查、下载、取消及安装。禁用自动下载、退出自动安装、降级、预发行和 Web 安装器；完整下载后验证 SHA-512，不通过则禁止安装。
+- 正式 feed 为 GitHub `Z1og/Safehouse` Releases，每次发布必须上传 `latest.yml` 及其指向的安装 EXE。保留便携 ZIP 与两个 SHA-256 文件，源码不会含私人更新令牌。
+- 安装版更新指定当前安装目录；便携版更新会转为安装版。旧于 0.1.15 的客户端需首次手动下载安装器。`偏好设置 → 应用更新` 显示真实版本、进度和错误；普通退出不安装。
+- 安装前检查文件操作、工坊和面板下载队列，并刷新控制台会话。卸载保留数据，不移除游戏内容；服务器主动退出、会话失效和账号密码变更仍按原认证规则处理。
+- `npm run smoke:updates` 使用真实 Electron / NsisUpdater 与临时 HTTP feed，覆盖无更新、网络错误、重试、取消、进度、SHA-512 失败、安装 IPC 保护和 980px 界面。下载 fixture 只验证校验流程，绝不执行。
+- `SAFEHOUSE_INSTALLER_APP` 指向已有打包应用后，`npm run smoke:installer` 构造隔离的前一版本与当前版本安装器，验证实际安装、客户端内下载并升级、原目录重启与卸载。使用独立 appId、`SafehouseUpdateTest.exe`、快捷方式、用户数据、游戏目录和更新缓存，避免关闭真实客户端；测试包版本标记仅供集成测试。
 
 ## 开发与验证
 
@@ -143,11 +156,12 @@ npm run smoke:console-login
 npm run smoke:server-connection
 npm run smoke:translation
 npm run smoke:favorites
+npm run smoke:updates
 npm run pack
 ```
 
 `npm start` 自动准备本机运行时，解决当前工程路径下的启动问题。`npm test` 使用临时目录验证核心模块；`smoke` 启动真实 Electron，通过桌面 IPC 验证启停、VPK / ZIP 安装、重复拒绝、回收站卸载、主题与重启恢复；`smoke:renderer` 使用系统 Chrome / Edge 与测试接口验证渲染和账号状态切换。界面截图放在 `desktop/output/playwright`。
 
-发布包生成在项目 `outputs/desktop`，包含 ZIP 与 SHA-256 校验文件。可用 `SAFEHOUSE_ELECTRON_BIN` 指定运行时；验证已打包程序时另外设置 `SAFEHOUSE_PACKAGED=1`。
+发布包生成在项目 `outputs/desktop`，包含安装 EXE、便携 ZIP、各自 SHA-256 和 `latest.yml`。发布前需核对 feed 中的安装器文件名、版本及 SHA-512；正式上传必须带上 `latest.yml`。可用 `SAFEHOUSE_ELECTRON_BIN` 指定运行时；验证已打包程序时另外设置 `SAFEHOUSE_PACKAGED=1`。
 
 `npm run pack` 需要 Windows 和 Zig 原生编译器。将 `SAFEHOUSE_ZIG_BIN` 设置为 `zig.exe` 的绝对路径，或放置于 `%LOCALAPPDATA%\Safehouse\build-tools\<Zig目录>\zig.exe`。打包时使用系统 `icacls.exe` 修正自有发布 EXE 的完整性级别，失败会终止构建；不会要求管理员权限。

@@ -17,7 +17,7 @@ function visit(name, parent) {
   if (!files.length) {
     const fallback = path.join(root, 'docs', 'licenses', `${pkg.name.replace('/', '-')}-LICENSE`);
     if (!fs.existsSync(fallback)) throw new Error(`Missing license text: ${pkg.name}`);
-    notices.push(`\n--- Upstream LICENSE (not included in the npm archive) ---\n${fs.readFileSync(fallback, 'utf8')}\n`);
+    notices.push(`\n--- License text / attribution (not included in the npm archive) ---\n${fs.readFileSync(fallback, 'utf8')}\n`);
   }
   for (const value of files) notices.push(`\n--- ${value} ---\n${fs.readFileSync(path.join(dir, value), 'utf8')}\n`);
   for (const dependency of Object.keys(pkg.dependencies || {}).sort()) visit(dependency, dir);

@@ -16,6 +16,7 @@ const { SearchPlanner, BilingualSearch } = require('./core/search');
 const { PROJECT, projectLink } = require('./core/project');
 const { CenterConsole, consoleUrl, configuredConsoleUrl, DEFAULT_CONSOLE_URL } = require('./core/console');
 const { ConsoleLoginStore } = require('./core/console-login');
+const { Updates } = require('./core/updates');
 
 app.setName('Safehouse');
 const profileDirectory = process.env.SAFEHOUSE_DATA_DIR ? path.resolve(process.env.SAFEHOUSE_DATA_DIR) : path.join(app.getPath('appData'), 'Safehouse');
@@ -25,7 +26,7 @@ app.setPath('sessionData', profileDirectory);
 if (!app.requestSingleInstanceLock()) app.quit();
 let mainWindow, library, downloads, community, translator, settings, settingsFile, discovery, workshop;
 let operation = false;
-let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations, favorites;
+let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations, favorites, updates;
 const rendererPath = path.join(__dirname, 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
 const notify = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:changed'); };
@@ -49,7 +50,7 @@ function currentState() {
     // a managed mod after its addons copies have been uninstalled.
     inventory.items = inventory.items.filter(item => item.source !== 'cache' || ugc.subscribedIds.includes(item.workshopId));
   }
-  return { ...inventory, favorites: favorites.list(), downloads: downloads.list(), steam: { ...steam, ugc }, settings, language: app.getLocale(), version: app.getVersion(), discoveryWarnings: discovery.warnings };
+  return { ...inventory, favorites: favorites.list(), downloads: downloads.list(), steam: { ...steam, ugc }, settings, language: app.getLocale(), version: app.getVersion(), update: updates.snapshot(), discoveryWarnings: discovery.warnings };
 }
 function officialUrl(value) {
   const url = new URL(value);
@@ -67,6 +68,10 @@ function createWindow() {
 app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
 app.whenReady().then(async () => {
   const stateDir = app.getPath('userData'); fs.mkdirSync(stateDir, { recursive: true });
+  const installed = fs.existsSync(path.join(process.resourcesPath, 'safehouse-installed.json'));
+  const engine = app.isPackaged ? new (require('electron-updater').NsisUpdater)() : null;
+  if (installed && engine) engine.installDirectory = path.dirname(app.getPath('exe'));
+  updates = new Updates({ engine, version: app.getVersion(), mode: app.isPackaged ? installed ? 'installed' : 'portable' : 'development', changed: value => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:updateChanged', value); } });
   settingsFile = path.join(stateDir, 'settings.json');
   settings = readJson(settingsFile, { gameRoot: '', theme: 'system', autoTranslate: true, language: app.getLocale() });
   const panelUrl = configuredConsoleUrl(settings.consoleUrl);
@@ -104,6 +109,14 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = settings.theme;
   session.defaultSession.setPermissionRequestHandler((_, __, callback) => callback(false));
   bind('state', currentState);
+  bind('updateCheck', () => updates.check());
+  bind('updateDownload', () => updates.download());
+  bind('updateCancel', () => updates.cancel());
+  bind('updateInstall', async () => {
+    if (operation || downloads.active || panelDownloads.active.size || downloads.jobs.some(job => job.kind === 'workshop' && ['queued', 'steam', 'downloading', 'installing'].includes(job.status))) throw new Error('请先完成或取消正在下载、安装的模组，再安装客户端更新');
+    await centerConsole?.flush();
+    return updates.install();
+  });
   bind('scan', () => exclusive(() => { discovery = discover(); if (!library.root && discovery.games[0]) library.configure(discovery.games[0], discovery.steamRoots); else library.steamRoots = discovery.steamRoots; return currentState(); }));
   bind('chooseGame', () => exclusive(async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: '选择 Left 4 Dead 2 游戏目录', properties: ['openDirectory'] });
@@ -202,6 +215,7 @@ app.whenReady().then(async () => {
 }).catch(error => { dialog.showErrorBox('Safehouse 启动失败', error.stack || error.message); app.quit(); });
 let flushingSession = false;
 app.on('before-quit', event => {
+  updates?.close();
   panelDownloads?.close(); downloads?.active?.controller.abort();
   if (!flushingSession && centerConsole?.panelSession) {
     event.preventDefault(); flushingSession = true;

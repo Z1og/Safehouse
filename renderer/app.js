@@ -39,6 +39,7 @@ const main = document.querySelector('#main');
 const labels = { library: '模组管理', workshop: '创意工坊', favorites: '我的收藏', console: '中心控制台', settings: '偏好设置' };
 const { types, groups: categoryGroups, targets: targetCatalog } = window.SafehouseCatalog;
 const sources = { local: '本地导入', workshop: 'Steam 工坊', cache: 'Steam 缓存' };
+let updateState;
 let state, page = 'library', filter = 'all', subfilter = 'all', slotFilter = 'all', repeatedOnly = false, query = '', sort = 'updated', layout = 'grid', selected = new Set(), busy = false;
 let workshop = { items: [], query: '', page: 1, category: 'all', subcategory: 'all', hasMore: false, loading: false, error: '', loaded: false, generation: 0, translationError: '' };
 let favoriteView = { query: '', category: 'all', subcategory: 'all', target: 'all', page: 1 };
@@ -391,11 +392,19 @@ function cardTransfer(item, community) {
   if (!job || !activeStatuses.includes(job.status) && job.status !== 'failed') return '';
   return `<div class="card-transfer">${jobProgress(job)}${job.status === 'failed' ? `<p>${escape(job.error || '下载或安装失败，可重试')}</p>` : ''}</div>`;
 }
+function renderAppUpdate() {
+  const container = document.querySelector('#app-update-panel'); if (!container) return;
+  const value = updateState || state.update || { status: 'idle', mode: 'development', currentVersion: state.version, message: '点击检查更新。' };
+  const active = ['checking', 'downloading', 'installing'].includes(value.status);
+  const canDownload = value.status === 'available' || value.status === 'error' && value.phase === 'download' && value.latestVersion;
+  container.innerHTML = `<div class="section-card-heading">${icon('refresh')}<h3>应用更新</h3></div><div class="preference"><div><b>Safehouse v${escape(value.currentVersion || state.version)} · ${({installed:'安装版',portable:'便携版',development:'开发模式'})[value.mode] || '桌面版'}</b><p>${value.latestVersion ? '可用版本 v' + escape(value.latestVersion) + '<br>' : ''}<span id="app-update-status" role="status" data-status="${value.status}">${escape(value.message)}</span><br>更新来源：GitHub 正式发布 · 设置、收藏和控制台登录使用原用户数据目录。</p></div><div class="actions">${button('检查更新', 'update-check', 'refresh', 'small', active || ['downloaded','disabled'].includes(value.status) ? 'disabled' : '')}${canDownload ? button(value.phase === 'download' ? '重试下载' : value.mode === 'portable' ? '下载安装版' : '下载更新', 'update-download', 'download', 'small primary') : ''}${value.status === 'downloading' ? button('取消下载', 'update-cancel', 'close', 'small') : ''}${value.status === 'downloaded' ? button(value.mode === 'portable' ? '退出并安装新版' : '重启并安装', 'update-install', 'refresh', 'small primary') : ''}${button('发布页面', 'update-releases', 'external', 'small')}</div></div>${value.status === 'downloading' ? `<div class="app-update-progress"><progress max="100" value="${Number(value.progress) || 0}" aria-label="更新下载进度"></progress><span>${Math.floor(Number(value.progress) || 0)}% · ${bytes(value.transferred)} / ${bytes(value.total)}</span></div>` : ''}${value.mode === 'portable' ? '<p class="info-line">便携版可在这里下载安装版，安装后继续使用当前设置与登录记录。便携 ZIP 仍可从发布页面下载。</p>' : ''}${value.releaseNotes ? `<details class="app-update-notes"><summary>更新说明</summary><pre>${escape(value.releaseNotes)}</pre></details>` : ''}`;
+}
 function renderSettings() {
-  main.innerHTML = heading('偏好设置', '让安全屋按照你的习惯运转。') + `<section class="section-card"><div class="section-card-heading">${icon('folder')}<h3>游戏与内容目录</h3></div><div class="preference"><div><b>求生之路 2 安装目录</b><p>${escape(state.gameRoot || '尚未连接游戏目录')}</p></div>${button('自动识别', 'scan', 'refresh', 'small')}${button('选择目录', 'choose-game', 'folder', 'small')}</div>${state.paths.length ? `<div class="path-list">${state.paths.map(value => `<div>${escape(value)}</div>`).join('')}</div>` : ''}${state.discoveryWarnings.length ? `<div class="path-list">${state.discoveryWarnings.map(value => `<p>${escape(value)}</p>`).join('')}</div>` : ''}</section>
+  main.innerHTML = heading('偏好设置', '让安全屋按照你的习惯运转。') + `<section id="app-update-panel" class="section-card" aria-label="应用更新"></section><section class="section-card"><div class="section-card-heading">${icon('folder')}<h3>游戏与内容目录</h3></div><div class="preference"><div><b>求生之路 2 安装目录</b><p>${escape(state.gameRoot || '尚未连接游戏目录')}</p></div>${button('自动识别', 'scan', 'refresh', 'small')}${button('选择目录', 'choose-game', 'folder', 'small')}</div>${state.paths.length ? `<div class="path-list">${state.paths.map(value => `<div>${escape(value)}</div>`).join('')}</div>` : ''}${state.discoveryWarnings.length ? `<div class="path-list">${state.discoveryWarnings.map(value => `<p>${escape(value)}</p>`).join('')}</div>` : ''}</section>
     <section class="section-card"><div class="section-card-heading">${icon('steam')}<h3>Steam 本地状态</h3></div><div class="preference"><div><b>${state.steam?.account ? escape(state.steam.account.name) : '未找到本地 Steam 账号'}</b><p>${state.steam?.account ? `SteamID · ${escape(state.steam.account.steamId)}` : '未读取到 loginusers.vdf，请先在本机登录过 Steam。'}<br>${state.steam?.running ? 'Steam 客户端正在运行' : 'Steam 客户端未运行'}<br>${state.steam?.ugc?.ready ? '订阅与下载接口已连接' : escape(state.steam?.ugc?.error || '订阅接口尚未连接')}${state.steam?.root ? `<br>Steam 根目录 · ${escape(state.steam.root)}` : ''}</p></div>${state.steam?.running ? '' : button('打开 Steam', 'open-steam', 'steam', 'small primary')}</div></section>
     <section class="section-card"><div class="section-card-heading">${icon('translate')}<h3>语言与翻译</h3></div><div class="preference"><div><b>自动翻译社区内容</b><p>标题和详情自动翻译，始终可以查看原文。<br>优先使用必应翻译，不可用时切换 Google；只发送社区公开文字和搜索词。失败会保留原文，可在详情里重试。</p></div><button class="switch large" role="switch" aria-checked="${state.settings.autoTranslate}" data-action="toggle-translation" aria-label="自动翻译社区内容"><span class="switch-track"></span></button></div><div class="preference"><div><b>翻译目标语言</b><p>首次启动跟随系统语言 · 当前系统 ${escape(state.language)}</p></div><select id="language-select" aria-label="翻译语言">${!uiLanguages[state.settings.language] ? `<option value="${escape(state.settings.language)}">系统 · ${escape(state.settings.language)}</option>` : ''}${Object.entries(uiLanguages).map(([value, name]) => `<option value="${value}" ${value === state.settings.language ? 'selected' : ''}>${name}</option>`).join('')}</select></div></section>
     <section class="section-card"><div class="section-card-heading">${icon('sun')}<h3>外观</h3></div><div class="preference"><div><b>应用主题</b><p>Miuix / HyperOS 设计风格，柔和表面与蓝色强调色。</p></div><select id="theme-select" aria-label="应用主题">${[['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, name]) => `<option value="${value}" ${state.settings.theme === value ? 'selected' : ''}>${name}</option>`).join('')}</select></div></section><p class="info-line">Safehouse v${escape(state.version)} · 为热爱求生之路的你而做。<br><button data-action="project-repository">GitHub 源码与更新</button> · © 2026 Z1og · 非商业使用，商用需授权。<br>界面参考 <button data-action="open-miuix">Miuix</button>，以 Electron 实现桌面交互。与 Valve / Steam 无隶属关系。</p>`;
+  renderAppUpdate();
 }
 async function showDetail(id, isCommunity = false) {
   const request = ++detailRequest;
@@ -516,6 +525,11 @@ const actions = {
   'open-miuix': () => call('open', 'https://compose-miuix-ui.github.io/miuix/zh_CN/'),
   'project-group': async () => { const group = await call('copyGroup'); toast(`QQ群号 ${group} 已复制，在 QQ 搜索加入`); },
   'project-repository': () => call('projectLink', 'repository'),
+  'update-check': async () => { updateState = await call('updateCheck'); renderAppUpdate(); },
+  'update-download': async () => { updateState = await call('updateDownload'); renderAppUpdate(); },
+  'update-cancel': async () => { updateState = await call('updateCancel'); renderAppUpdate(); },
+  'update-install': async () => { updateState = await call('updateInstall'); renderAppUpdate(); },
+  'update-releases': () => call('projectLink', 'releases'),
   'open-item': element => call('open', `https://steamcommunity.com/sharedfiles/filedetails/?id=${element.dataset.id}`),
   'subscribe-item': async element => { await call('subscribe', element.dataset.id); if (detail && workshopKey(detail, detail.community) === element.dataset.id) detail.subscribed = true; transfersExpanded = true; await refresh(); toast('已订阅，下载和安装进度显示在当前页面'); },
   'unsubscribe-item': async element => { try { const result = await call('unsubscribe', element.dataset.id); if (detail && workshopKey(detail, detail.community) === element.dataset.id) { if (detail.community) detail.subscribed = false; else { document.querySelector('#details-dialog').close(); detail = null; } } toast(result.preserved ? `已取消订阅，保留 ${result.retained} 个本地化副本` : `已取消订阅并卸载 ${result.removed.length} 个本地副本`); } finally { await refresh(); } },
@@ -603,6 +617,7 @@ if (api) {
     state.downloads = downloads;
     renderTransfers();
   });
+  api.onUpdateChanged?.(value => { updateState = value; if (page === 'settings') renderAppUpdate(); });
   api.onConsoleChanged?.(value => { consoleState = value; renderServerConnection(); if (page === 'console') renderConsoleStatus(); if (value.notice) toast(value.notice); });
 }
 refresh().catch(error => { main.innerHTML = empty('warning', '安全屋暂时无法打开', escape(error.message), button('重新扫描', 'scan', 'refresh', 'primary')); });
