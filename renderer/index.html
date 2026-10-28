@@ -15,6 +15,7 @@
       <nav aria-label="主导航">
         <button class="nav active" data-page="library"><span data-icon="library"></span>模组管理<span class="nav-count" id="library-count">0</span></button>
         <button class="nav" data-page="workshop"><span data-icon="compass"></span>创意工坊<span class="nav-dot"></span></button>
+        <button class="nav" data-page="favorites"><span data-icon="heart"></span>我的收藏<span class="nav-count" id="favorites-count">0</span></button>
         <button class="nav" data-page="console"><span data-icon="drive"></span>中心控制台</button>
       </nav>
       <section class="sidebar-connection" id="server-connection" aria-label="服务器连接" data-status="unavailable"><div class="server-connection-heading"><b><i class="server-connection-dot"></i>服务器连接</b><button class="server-connection-copy" data-action="copy-server-connection" aria-label="复制服务器连接命令" title="复制服务器连接命令" disabled><span data-icon="copy"></span></button></div><button class="server-connection-command" id="server-connection-command" data-action="copy-server-connection" aria-label="复制游戏连接命令" disabled>暂未获取服务器地址</button><p id="server-connection-hint">打开控制台后自动读取</p></section>
@@ -33,6 +34,7 @@
   <script src="catalog.js"></script>
   <script src="workshop-catalog.js"></script>
   <script src="workshop-labels.js"></script>
+  <script src="favorite-filters.js"></script>
   <script src="search-catalog.js"></script>
   <script src="app.js"></script>
 </body>

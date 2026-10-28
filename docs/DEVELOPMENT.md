@@ -4,7 +4,7 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 
 ## 直接运行
 
-完整解压 `Safehouse-0.1.12-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
+完整解压 `Safehouse-0.1.13-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
 
 0.1.2 修正本机发布目录继承的 Low mandatory label：旧 EXE 实际以低完整性运行，写入 AppData 被 Windows 拒绝，因此看起来需要管理员权限。打包脚本仅将自己生成的启动器和应用 EXE 标记为 Medium，不修改工作区或系统目录 ACL，不关闭 UAC。ZIP 不携带 NTFS 完整性标签；建议完整解压到正常的用户文件夹。
 
@@ -87,6 +87,13 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 - 卡片标题完成后局部更新；详情标题与说明分别展示，部分失败不丢弃成功译文，失败时可重试及查看原文。关闭和切换详情使用请求标识丢弃过期结果。
 - `npm run smoke:translation` 使用真实 Electron IPC 和模拟的服务响应验证标题即时显示、详情翻译、原文切换、失败重试、部分成功和过期结果隔离；`tests/translation.test.js` 覆盖服务切换、缓存、总超时、响应正文卡住、长文及重试恢复。
 
+## 我的收藏与分页（0.1.13）
+
+- `core/favorites.js` 只保存经过校验的公开元数据快照，`favorites.json` 与版本目录分开。收藏没有 Steam 操作和游戏文件操作依赖，移除记录不调用取消订阅、卸载或任务清理。写入失败不更新内存；相同项目重复收藏不生成副本。
+- 工坊卡片和详情提供收藏；收藏页只展示已收藏内容。复用工坊标签与本地资源优先的分类依据，支持大类、细分类、具体替换目标、本地双语别名搜索及每页 30 项。收藏详情先显示保存信息，远程详情不可用时保留快照。
+- 页码可点击或输入回车跳转。单一查询使用社区真实页码；社区有总页数时显示并校验。双语会话连续合并去重，大跨度跳转直接从所选社区页建立新游标，不预取中间所有页面；已展示页缓存保持返回稳定。没有可靠总页数时不估造总数。
+- 整页标题翻译独立于搜索返回，不占用界面的操作锁；旧页的后台结果不会覆盖新页。`smoke:favorites` 在翻译请求始终等待时验证下一页、数字按钮、输入跳转和收藏，并用临时 VPK 验证移除收藏后安装、启停与订阅保持。
+
 ## Steam、下载和翻译的实际行为
 
 管理器启动后直接读取本机 Steam 安装目录下的 `config/loginusers.vdf`，显示最近使用的本地账号。Steam 未运行时可以从设置页打开 Steam；管理器不要求输入密码、不嵌入 Steam 登录页，也不保存网页会话。
@@ -124,6 +131,7 @@ npm run smoke:console-search
 npm run smoke:panel-download
 npm run smoke:server-connection
 npm run smoke:translation
+npm run smoke:favorites
 npm run pack
 ```
 

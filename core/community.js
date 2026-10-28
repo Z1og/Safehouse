@@ -37,7 +37,8 @@ function parseBrowse(html) {
     const result = query?.state?.data;
     if (!Array.isArray(result?.results)) return null;
     const items = result.results.filter(item => item.consumer_appid === 550 && /^\d{1,20}$/.test(item.publishedfileid) && !item.banned).map(item => ({ id: item.publishedfileid, title: String(item.title || '').trim(), author: String(item.creator || ''), description: String(item.short_description || ''), image: /^https:\/\//.test(item.preview_url || '') ? item.preview_url : '', tags: (item.tags || []).map(tag => tag.tag), url: `https://steamcommunity.com/sharedfiles/filedetails/?id=${item.publishedfileid}` }));
-    return { items, page: Number(result.current_page) || 1, hasMore: Number(result.current_page) < Number(result.total_pages) };
+    const page = Number(result.current_page) || 1, totalPages = Number(result.total_pages);
+    return { items, page, hasMore: page < totalPages, ...(Number.isInteger(totalPages) && totalPages >= 0 ? { totalPages } : {}) };
   } catch { return null; }
 }
 class Community {

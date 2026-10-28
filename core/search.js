@@ -36,21 +36,27 @@ class BilingualSearch {
     const key = JSON.stringify([plan.queries, category, subcategory]);
     let state = this.sessions.get(key);
     if (!state || Date.now() - state.created > 10 * 60 * 1000) {
-      state = { created: Date.now(), sources: plan.queries.map(query => ({ query, page: 0, queue: [], more: true })), seen: new Set(), pages: [], pending: Promise.resolve(), cursor: 0 };
+      state = { created: Date.now(), sources: plan.queries.map(query => ({ query, page: 0, queue: [], more: true })), seen: new Set(), pages: new Map(), nextPage: 1, contiguous: true, pending: Promise.resolve(), cursor: 0 };
       this.sessions.set(key, state);
       if (this.sessions.size > 8) this.sessions.delete(this.sessions.keys().next().value);
     }
     const run = state.pending.then(async () => {
-      if (page > state.pages.length + 10) throw new Error('请依次浏览双语搜索结果页');
-      while (state.pages.length < page) {
-        if (state.pages.length && !state.pages.at(-1).hasMore) return { items: [], page, hasMore: false, search: plan };
+      if (state.pages.has(page)) return state.pages.get(page);
+      // Seek distant pages directly rather than issuing hundreds of hidden requests.
+      // Already displayed pages remain cached and previously displayed IDs stay deduplicated.
+      if (page < state.nextPage || page > state.nextPage + 3) {
+        state.sources = plan.queries.map(query => ({ query, page: page - 1, queue: [], more: true }));
+        state.nextPage = page; state.contiguous = false; state.cursor = 0;
+      }
+      while (state.nextPage <= page) {
+        if (state.pages.has(state.nextPage - 1) && !state.pages.get(state.nextPage - 1).hasMore) return { items: [], page, hasMore: false, search: plan };
         const items = [], warnings = [];
-        let failures = 0;
-        while (items.length < 30) {
+        let failures = 0, rounds = 0;
+        while (items.length < 30 && rounds++ < 60) {
           const empty = state.sources.filter(source => source.more && !source.queue.length);
           const fetched = await Promise.allSettled(empty.map(async source => {
             const result = await this.community.search(source.query, source.page + 1, category, subcategory);
-            source.page++; source.queue = [...result.items]; source.more = !!result.hasMore;
+            source.page++; source.queue = [...result.items]; source.more = !!result.hasMore && source.page < 1000;
           }));
           fetched.forEach((result, index) => {
             if (result.status === 'rejected') { failures++; empty[index].more = false; warnings.push(`「${empty[index].query}」查询失败：${result.reason.message}`); }
@@ -68,9 +74,10 @@ class BilingualSearch {
         }
         if (!items.length && failures === state.sources.length) { this.sessions.delete(key); throw new Error(warnings.join('；')); }
         const hasMore = state.sources.some(source => source.more || source.queue.some(item => !state.seen.has(item.id)));
-        state.pages.push({ items, page: state.pages.length + 1, hasMore, search: { ...plan, warning: [plan.warning, ...warnings].filter(Boolean).join('；') } });
+        state.pages.set(state.nextPage, { items, page: state.nextPage, hasMore, ...(state.contiguous && !hasMore ? { totalPages: state.nextPage } : {}), search: { ...plan, warning: [plan.warning, ...warnings].filter(Boolean).join('；') } });
+        state.nextPage++;
       }
-      return state.pages[page - 1];
+      return state.pages.get(page);
     });
     state.pending = run.catch(() => {});
     return run;

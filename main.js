@@ -6,6 +6,7 @@ const { Library, discover } = require('./core/library');
 const { Downloads } = require('./core/downloads');
 const { PanelDownloads } = require('./core/panel-downloads');
 const { Localizations } = require('./core/localization');
+const { Favorites } = require('./core/favorites');
 const { Community, Translator } = require('./core/community');
 const { readLocalSteamState } = require('./core/steam');
 const { Workshop } = require('./core/workshop');
@@ -20,7 +21,7 @@ if (process.env.SAFEHOUSE_DATA_DIR) app.setPath('userData', path.resolve(process
 if (!app.requestSingleInstanceLock()) app.quit();
 let mainWindow, library, downloads, community, translator, settings, settingsFile, discovery, workshop;
 let operation = false;
-let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations;
+let searchPlanner, bilingualSearch, centerConsole, panelDownloads, localizations, favorites;
 const rendererPath = path.join(__dirname, 'renderer', 'index.html');
 const rendererUrl = pathToFileURL(rendererPath).href;
 const notify = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:changed'); };
@@ -44,7 +45,7 @@ function currentState() {
     // a managed mod after its addons copies have been uninstalled.
     inventory.items = inventory.items.filter(item => item.source !== 'cache' || ugc.subscribedIds.includes(item.workshopId));
   }
-  return { ...inventory, downloads: downloads.list(), steam: { ...steam, ugc }, settings, language: app.getLocale(), version: app.getVersion(), discoveryWarnings: discovery.warnings };
+  return { ...inventory, favorites: favorites.list(), downloads: downloads.list(), steam: { ...steam, ugc }, settings, language: app.getLocale(), version: app.getVersion(), discoveryWarnings: discovery.warnings };
 }
 function officialUrl(value) {
   const url = new URL(value);
@@ -71,6 +72,7 @@ app.whenReady().then(async () => {
   // Stale saved paths remain visible in settings, but never permit a file operation.
   if (settings.gameRoot && !fs.existsSync(path.join(settings.gameRoot, 'left4dead2', 'gameinfo.txt'))) { discovery.warnings.push('保存的游戏路径已失效，请重新选择'); library.root = ''; }
   localizations = new Localizations({ stateDir, library });
+  favorites = new Favorites({ stateDir });
   downloads = new Downloads({
     stateDir,
     library,
@@ -115,6 +117,8 @@ app.whenReady().then(async () => {
   }));
   bind('search', (query, page, category, subcategory) => bilingualSearch.search(query, page, category, subcategory));
   bind('searchPlan', query => searchPlanner.plan(query));
+  bind('favoriteAdd', value => favorites.add(value));
+  bind('favoriteRemove', id => favorites.remove(id));
   bind('consoleShow', bounds => centerConsole.show(bounds));
   bind('consoleHide', () => centerConsole.hide());
   bind('consoleBounds', bounds => centerConsole.layout(bounds));

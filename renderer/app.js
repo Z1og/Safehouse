@@ -1,5 +1,6 @@
 const api = window.safehouse;
 const icons = {
+  heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
   copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/>',
   library: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
   compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5z"/>',
@@ -35,11 +36,12 @@ function hydrateIcons(root = document) { root.querySelectorAll('[data-icon]').fo
 hydrateIcons();
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const main = document.querySelector('#main');
-const labels = { library: '模组管理', workshop: '创意工坊', console: '中心控制台', settings: '偏好设置' };
+const labels = { library: '模组管理', workshop: '创意工坊', favorites: '我的收藏', console: '中心控制台', settings: '偏好设置' };
 const { types, groups: categoryGroups, targets: targetCatalog } = window.SafehouseCatalog;
 const sources = { local: '本地导入', workshop: 'Steam 工坊', cache: 'Steam 缓存' };
 let state, page = 'library', filter = 'all', subfilter = 'all', slotFilter = 'all', repeatedOnly = false, query = '', sort = 'updated', layout = 'grid', selected = new Set(), busy = false;
 let workshop = { items: [], query: '', page: 1, category: 'all', subcategory: 'all', hasMore: false, loading: false, error: '', loaded: false, generation: 0, translationError: '' };
+let favoriteView = { query: '', category: 'all', subcategory: 'all', target: 'all', page: 1 };
 let detail, detailRequest = 0, detailTranslationRequest = 0, detailTranslated = null, showOriginal = false, toastTimer, pendingRefresh = false;
 const uiLanguages = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', ko: '한국어', de: 'Deutsch', fr: 'Français', ru: 'Русский', es: 'Español', pt: 'Português', th: 'ไทย' };
 const workshopCategories = Object.entries(window.SafehouseWorkshopCatalog.categories).filter(([id]) => id !== 'campaign').map(([id, value]) => [id, value.label]);
@@ -77,6 +79,7 @@ function updateShell() {
   renderServerConnection();
   const installed = state.items.filter(item => item.source !== 'cache');
   document.querySelector('#library-count').textContent = installed.length;
+  document.querySelector('#favorites-count').textContent = state.favorites?.length || 0;
   document.querySelector('#game-status').innerHTML = `<i class="status-dot ${state.gameRoot ? 'ready' : ''}"></i>${state.gameRoot ? `已连接 · ${escape(state.gameRoot)}` : '未找到游戏 · 请在偏好设置中选择安装目录'}`;
   document.querySelector('#game-status').title = state.gameRoot;
   document.querySelector('#version').textContent = `v${state.version}`;
@@ -104,7 +107,7 @@ function render() {
   main.classList.toggle('console-page', page === 'console');
   document.body.classList.toggle('console-wide', page === 'console' && consoleWide);
   if (page !== 'console') { consoleObserver?.disconnect(); if (api?.consoleHide) call('consoleHide').catch(() => {}); }
-  ({ library: renderLibrary, workshop: renderWorkshop, console: renderConsole, settings: renderSettings })[page]();
+  ({ library: renderLibrary, workshop: renderWorkshop, favorites: renderFavorites, console: renderConsole, settings: renderSettings })[page]();
 }
 async function refresh(renderPage = true) {
   if (pendingRefresh) return; pendingRefresh = true;
@@ -116,7 +119,7 @@ async function refresh(renderPage = true) {
     if (steamChanged) { workshop.generation++; workshop.items = []; workshop.loaded = false; workshop.loading = false; workshop.error = ''; }
     updateShell();
     if (renderPage || steamChanged) render();
-    else { renderTransfers(); if (page === 'workshop') renderWorkshopContent(); }
+    else { renderTransfers(); if (page === 'workshop') renderWorkshopContent(); if (page === 'favorites') renderFavoritesContent(); }
     if (detail) renderDetail();
     if (steamChanged && page === 'workshop') loadWorkshop();
   }
@@ -187,7 +190,7 @@ function card(item, community = false) {
   const targetTags = !community && targets.length ? `<div class="target-tags">${targets.slice(0, 4).map(target => `<button class="target-tag" data-action="view-target" data-target="${target.id}" title="查看所有替换 ${escape(target.label)} 的内容">${escape(target.label)}</button>`).join('')}${targets.length > 4 ? `<span class="target-tag">+${targets.length - 4} 个目标</span>` : ''}</div>` : '';
   const shared = community || item.source === 'cache' ? [] : targets.filter(target => replacementSlot(target) && counts.get(target.id)?.enabled > 1);
   const sharedTag = shared.length ? `<button class="same-target-badge" data-action="view-target" data-target="${shared[0].id}" title="同目标多项启用仅提示替换范围重叠，打开后可逐项禁用对照">同目标已启用 ${counts.get(shared[0].id).enabled} 项</button>` : '';
-  return `<article class="content-card ${selected.has(item.id) && !community ? 'selected' : ''}"><div class="cover ${escape(item.type || 'mod')}" data-detail="${item.id}" data-community="${community}">${item.image ? `<img src="${escape(item.image)}" alt="" loading="lazy">` : icon(item.type === 'mod' ? 'package' : item.type || 'package')}${!community && item.source !== 'cache' ? `<label class="card-select" aria-label="选择 ${escape(item.title)}"><input type="checkbox" data-select="${item.id}" ${selected.has(item.id) ? 'checked' : ''}></label>` : ''}<span class="tag">${community ? '创意工坊' : types[item.type] || '未识别内容'}</span></div><div class="card-content"><button class="card-title" title="${escape(item.title)}" data-detail="${item.id}" data-community="${community}">${escape(item.translatedTitle || item.title)}</button>${item.translatedTitle && item.translatedTitle !== item.title ? `<p class="card-original" title="${escape(item.title)}">${escape(item.title)}</p>` : ''}<p class="card-subtitle">${community ? escape(item.author || `工坊 ID · ${item.id}`) : item.error ? `读取失败 · ${escape(item.error)}` : `${escape(item.author)}<span> · </span>${bytes(item.size)}`}</p>${community ? workshopTagMarkup(item) : targetTags}${sharedTag}${cardTransfer(item, community)}<div class="card-actions">${localizationControl(item, community)}${subscriptionControls(item, community)}<button class="button small" data-detail="${item.id}" data-community="${community}">${icon('info')}详情</button></div><div class="card-bottom"><span class="source-label">${icon(community || item.source !== 'local' ? 'steam' : 'folder')}${community ? 'Steam Workshop' : item.localized ? '本地化副本' : sources[item.source]}</span>${community ? '' : item.source === 'cache' ? '<span class="source-label">等待同步</span>' : `<button class="switch" role="switch" aria-checked="${item.enabled}" aria-label="${item.enabled ? '禁用' : '启用'} ${escape(item.title)}" data-toggle="${item.id}">${item.enabled ? '已启用' : '已禁用'}<span class="switch-track"></span></button>`}</div></div></article>`;
+  return `<article class="content-card ${selected.has(item.id) && !community ? 'selected' : ''}"><div class="cover ${escape(item.type || 'mod')}" data-detail="${item.id}" data-community="${community}">${item.image ? `<img src="${escape(item.image)}" alt="" loading="lazy">` : icon(item.type === 'mod' ? 'package' : item.type || 'package')}${!community && item.source !== 'cache' ? `<label class="card-select" aria-label="选择 ${escape(item.title)}"><input type="checkbox" data-select="${item.id}" ${selected.has(item.id) ? 'checked' : ''}></label>` : ''}<span class="tag">${community ? '创意工坊' : types[item.type] || '未识别内容'}</span></div><div class="card-content"><button class="card-title" title="${escape(item.title)}" data-detail="${item.id}" data-community="${community}">${escape(item.translatedTitle || item.title)}</button>${item.translatedTitle && item.translatedTitle !== item.title ? `<p class="card-original" title="${escape(item.title)}">${escape(item.title)}</p>` : ''}<p class="card-subtitle">${community ? escape(item.author || `工坊 ID · ${item.id}`) : item.error ? `读取失败 · ${escape(item.error)}` : `${escape(item.author)}<span> · </span>${bytes(item.size)}`}</p>${community ? workshopTagMarkup(item) : targetTags}${sharedTag}${page === 'favorites' ? '' : cardTransfer(item, community)}<div class="card-actions">${community && page === 'favorites' ? favoriteControl(item, true) : localizationControl(item, community) + subscriptionControls(item, community) + (community ? favoriteControl(item) : '')}<button class="button small" data-detail="${item.id}" data-community="${community}">${icon('info')}详情</button></div><div class="card-bottom"><span class="source-label">${icon(community || item.source !== 'local' ? 'steam' : 'folder')}${community ? 'Steam Workshop' : item.localized ? '本地化副本' : sources[item.source]}</span>${community ? '' : item.source === 'cache' ? '<span class="source-label">等待同步</span>' : `<button class="switch" role="switch" aria-checked="${item.enabled}" aria-label="${item.enabled ? '禁用' : '启用'} ${escape(item.title)}" data-toggle="${item.id}">${item.enabled ? '已启用' : '已禁用'}<span class="switch-track"></span></button>`}</div></div></article>`;
 }
 function renderLibraryContent() {
   const content = document.querySelector('#library-content'); if (!content) return;
@@ -234,32 +237,95 @@ function renderWorkshopTaxonomy() {
   const options = window.SafehouseWorkshopCatalog.categories[workshop.category].children;
   container.innerHTML = `<label class="workshop-category-label">${workshop.category === 'survivor' ? '具体角色' : workshop.category === 'weapon' ? '武器类型' : '细分类'}<select class="sort workshop-subcategory" id="workshop-subcategory" aria-label="工坊细分类"><option value="all">全部细分类</option>${options.map(([value, label]) => `<option value="${value}" ${workshop.subcategory === value ? 'selected' : ''}>${escape(label)}</option>`).join('')}</select></label>`;
 }
+function favoriteControl(item, removal = false) {
+  const saved = state.favorites?.some(value => value.id === item.id);
+  return button(saved && removal ? '移除收藏' : saved ? '已收藏' : '收藏', 'toggle-favorite', 'heart', `small favorite-button ${saved ? 'saved' : ''}`,
+    `data-id="${item.id}" aria-pressed="${!!saved}" title="${saved ? '仅移除收藏记录，不会取消订阅或卸载模组' : '仅保存收藏，不会订阅或下载'}"`);
+}
+async function toggleFavorite(id) {
+  const saved = state.favorites?.some(item => item.id === id);
+  const item = detail?.community && detail.id === id ? detail : workshop.items.find(item => item.id === id);
+  if (!saved && !item) throw new Error('内容已经变化，请重新打开详情');
+  state.favorites = saved ? await call('favoriteRemove', id) : await call('favoriteAdd', item);
+  updateShell();
+  if (page === 'favorites') renderFavoritesContent();
+  if (page === 'workshop') renderWorkshopContent();
+  if (detail) renderDetail();
+  toast(saved ? '已移除收藏，订阅和已安装模组不受影响' : '已加入我的收藏，未订阅或下载');
+}
+function renderFavorites() {
+  main.innerHTML = heading('我的收藏', '把喜欢的内容留在这里，按角色和武器慢慢挑选。')
+    + `<form class="workshop-search" id="favorites-form"><label class="search">${icon('search')}<input type="search" id="favorites-search" value="${escape(favoriteView.query)}" maxlength="200" placeholder="搜索已收藏的标题、作者、角色或武器" aria-label="搜索我的收藏"></label></form>
+    <div class="workshop-controls"><label class="workshop-category-label">分类<select class="sort workshop-category" id="favorites-category" aria-label="收藏分类">${workshopCategories.map(([id, label]) => `<option value="${id}" ${favoriteView.category === id ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div id="favorites-taxonomy"></div></div>
+    <div class="notice info">${icon('heart')}<span>收藏独立保存在本机，更新后继续保留。加入或移除收藏只修改展示记录，不会订阅、下载、取消订阅或卸载模组。</span></div><div id="favorites-content"></div>`;
+  renderFavoritesTaxonomy(); renderFavoritesContent();
+}
+function favoriteRows() {
+  return (state.favorites || []).map(item => ({ item, labels: workshopLabels(item) }));
+}
+function renderFavoritesTaxonomy() {
+  const container = document.querySelector('#favorites-taxonomy'); if (!container) return;
+  const { category, subcategory } = favoriteView, options = window.SafehouseWorkshopCatalog.categories[category].children;
+  const rows = favoriteRows().filter(({ item, labels }) => window.SafehouseFavoriteFilters.matches(item, labels, category, subcategory));
+  const ids = new Set(rows.flatMap(row => row.labels.map(label => label.targetId)).filter(Boolean));
+  if (favoriteView.target !== 'all' && !ids.has(favoriteView.target)) favoriteView.target = 'all';
+  const targets = targetCatalog.filter(target => ids.has(target.id));
+  container.innerHTML = `<label class="workshop-category-label">${category === 'survivor' ? '具体角色' : category === 'weapon' ? '武器类型' : '细分类'}<select class="sort workshop-subcategory" id="favorites-subcategory" aria-label="收藏细分类"><option value="all">全部细分类</option>${options.map(([id, label]) => `<option value="${id}" ${subcategory === id ? 'selected' : ''}>${escape(label)}</option>`).join('')}</select></label>
+    <label class="workshop-category-label">具体替换目标<select class="sort workshop-subcategory" id="favorites-target" aria-label="收藏具体替换目标"><option value="all">全部目标</option>${targets.map(target => `<option value="${target.id}" ${favoriteView.target === target.id ? 'selected' : ''}>${escape(target.label)}</option>`).join('')}</select></label>`;
+}
+function renderFavoritesContent() {
+  const content = document.querySelector('#favorites-content'); if (!content) return;
+  const terms = window.SafehouseSearch.aliases(favoriteView.query);
+  const items = favoriteRows().filter(({ item, labels }) => window.SafehouseFavoriteFilters.matches(item, labels, favoriteView.category, favoriteView.subcategory, favoriteView.target)
+    && window.SafehouseSearch.matches(`${item.id} ${item.title} ${item.author} ${(item.tags || []).join(' ')} ${labels.map(value => value.label).join(' ')}`, terms)).map(row => row.item);
+  const totalPages = Math.max(1, Math.ceil(items.length / 30)); favoriteView.page = Math.min(favoriteView.page, totalPages);
+  content.innerHTML = `<p class="favorites-summary" role="status">共 ${state.favorites?.length || 0} 项收藏 · 当前匹配 ${items.length} 项</p>`
+    + (items.length ? `<div class="content-grid">${items.slice((favoriteView.page - 1) * 30, favoriteView.page * 30).map(item => card(item, true)).join('')}</div>${pager('favorites', favoriteView.page, favoriteView.page < totalPages, totalPages)}`
+      : empty('heart', state.favorites?.length ? '没有匹配的收藏' : '收藏喜欢的模组', state.favorites?.length ? '换一个关键词、分类或具体目标试试。' : '在创意工坊卡片或详情中点击“收藏”，之后可以离线查看。', button('浏览创意工坊', 'go-workshop', 'compass', 'primary')));
+}
+function pager(scope, current, hasMore, totalPages) {
+  const known = Number.isInteger(totalPages) && totalPages > 0;
+  const max = known ? Math.min(1000, totalPages) : 1000;
+  const numbers = [...new Set([1, current - 1, current, current + 1, ...(known ? [max] : [])])].filter(value => value >= 1 && value <= max && (value <= current || hasMore || known)).sort((a, b) => a - b);
+  return `<nav class="pager" aria-label="${scope === 'workshop' ? '工坊' : '收藏'}分页">${button('上一页', 'previous-page', '', 'small', `data-scope="${scope}" ${current <= 1 ? 'disabled' : ''}`)}<div class="page-numbers">${numbers.map((value, index) => `${index && value > numbers[index - 1] + 1 ? '<span class="page-ellipsis">…</span>' : ''}<button class="page-number ${value === current ? 'active' : ''}" data-action="number-page" data-scope="${scope}" data-number="${value}" ${value === current ? 'aria-current="page"' : ''}>${value}</button>`).join('')}</div><span class="page-status">第 ${current} 页${known ? ` / 共 ${totalPages} 页` : ''}</span>${button('下一页', 'next-page', '', 'small', `data-scope="${scope}" ${!hasMore || current >= max ? 'disabled' : ''}`)}<form class="page-jump" data-page-jump="${scope}"><label>跳至<input type="number" name="pageNumber" inputmode="numeric" min="1" max="${max}" step="1" value="${current}" required aria-label="${scope === 'workshop' ? '工坊' : '收藏'}页码"></label><button class="button small" type="submit">跳转</button></form></nav>`;
+}
+async function goPage(scope, value) {
+  const target = Number(value), model = scope === 'favorites' ? favoriteView : workshop;
+  if (!Number.isInteger(target) || target < 1 || target > 1000) throw new Error('请输入 1–1000 之间的整数页码');
+  if (scope !== 'favorites' && workshop.loading) return;
+  if (target === model.page) return;
+  if (scope === 'favorites') { favoriteView.page = target; renderFavoritesContent(); }
+  else { await loadWorkshop(target); }
+  main.scrollTop = 0;
+}
 function renderWorkshopContent() {
   const content = document.querySelector('#workshop-content'); if (!content) return;
   document.querySelector('#workshop-search-note')?.remove(); content.insertAdjacentHTML('beforebegin', `<div id="workshop-search-note">${searchNote(workshop.search)}</div>`);
   if (workshop.loading) { content.innerHTML = `<div class="content-grid">${'<div class="skeleton"></div>'.repeat(6)}</div>`; return; }
-  if (workshop.error) { content.innerHTML = empty('globe', '社区暂时没有回应', escape(workshop.error), button('重新加载', 'reload-workshop', 'refresh', 'primary')); return; }
-  content.innerHTML = `${workshop.translationError ? `<div class="notice">${icon('translate')}<span>部分内容保留原文：${escape(workshop.translationError)}</span></div>` : ''}${workshop.items.length ? `<div class="content-grid">${workshop.items.map(item => card(item, true)).join('')}</div><div class="pager">${button('上一页', 'previous-page', '', 'small', workshop.page <= 1 ? 'disabled' : '')}<span>第 ${workshop.page} 页</span>${button('下一页', 'next-page', '', 'small', !workshop.hasMore ? 'disabled' : '')}</div>` : empty('search', '这里还没有内容', '试试其他关键词、分类，或直接粘贴创意工坊项目 ID。')}`;
+  if (workshop.error) { content.innerHTML = empty('globe', '社区暂时没有回应', escape(workshop.error), button('重新加载', 'reload-workshop', 'refresh', 'primary')) + pager('workshop', workshop.page, workshop.hasMore, workshop.totalPages); return; }
+  content.innerHTML = `${workshop.translationError ? `<div class="notice">${icon('translate')}<span>部分内容保留原文：${escape(workshop.translationError)}</span></div>` : ''}${workshop.items.length ? `<div class="content-grid">${workshop.items.map(item => card(item, true)).join('')}</div>${pager('workshop', workshop.page, workshop.hasMore, workshop.totalPages)}` : empty('search', '这里还没有内容', '试试其他关键词、分类，或直接粘贴创意工坊项目 ID。') + pager('workshop', workshop.page, false, workshop.totalPages)}`;
 }
-async function loadWorkshop() {
+async function loadWorkshop(targetPage = workshop.page) {
   const generation = ++workshop.generation;
+  workshop.page = targetPage;
   workshop.loading = true; workshop.error = ''; workshop.translationError = ''; workshop.search = { original: workshop.query, queries: window.SafehouseSearch.aliases(workshop.query), warning: '' }; renderWorkshopContent();
   try {
     const result = await call('search', workshop.query, workshop.page, workshop.category, workshop.subcategory);
     if (generation !== workshop.generation) return;
-    Object.assign(workshop, result, { loading: false, loaded: true }); renderWorkshopContent();
-    if (state.settings.autoTranslate) {
-      const waiting = [...workshop.items];
-      await Promise.all(Array.from({ length: 3 }, async () => {
-        while (waiting.length && generation === workshop.generation) {
-          const item = waiting.shift();
-          try { const result = await call('translate', item.title); if (generation === workshop.generation) { item.translatedTitle = result.text; updateWorkshopTranslation(item); } }
-          catch (error) { if (generation === workshop.generation) { workshop.translationError = error.message; updateWorkshopTranslation(); } }
-        }
-      }));
-      if (generation === workshop.generation) renderWorkshopContent();
-    }
+    Object.assign(workshop, result, { totalPages: result.totalPages, loading: false, loaded: true }); renderWorkshopContent();
+    if (state.settings.autoTranslate) translateWorkshopTitles(generation).catch(error => { if (generation === workshop.generation) { workshop.translationError = error.message; updateWorkshopTranslation(); } });
   } catch (error) { if (generation === workshop.generation) { workshop.loading = false; workshop.error = error.message; renderWorkshopContent(); } }
+}
+async function translateWorkshopTitles(generation) {
+  const waiting = [...workshop.items];
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    while (waiting.length && generation === workshop.generation) {
+      const item = waiting.shift();
+      try { const result = await call('translate', item.title); if (generation === workshop.generation) { item.translatedTitle = result.text; updateWorkshopTranslation(item); } }
+      catch (error) { if (generation === workshop.generation) { workshop.translationError = error.message; updateWorkshopTranslation(); } }
+    }
+  }));
+  if (generation === workshop.generation) renderWorkshopContent();
 }
 function updateWorkshopTranslation(item) {
   if (page !== 'workshop') return;
@@ -337,7 +403,11 @@ async function showDetail(id, isCommunity = false) {
   if (!dialog.open) dialog.showModal();
   content.innerHTML = '<div class="startup"><span class="spinner"></span><p>正在读取内容详情…</p></div>';
   try {
-    const item = isCommunity ? await call('details', id) : state.items.find(item => item.id === id);
+    const saved = isCommunity && state.favorites?.find(item => item.id === id);
+    if (saved) { detail = { ...saved, community: true }; renderDetail(); }
+    let item;
+    try { item = isCommunity ? await call('details', id) : state.items.find(item => item.id === id); }
+    catch (error) { if (!saved) throw error; item = saved; }
     if (request !== detailRequest || !dialog.open) return;
     if (!item) throw new Error('内容不存在，请刷新后重试');
     detail = { ...item, community: isCommunity }; renderDetail();
@@ -374,7 +444,7 @@ function detailTranslationMarkup() {
 function renderDetail() {
   if (!detail) return;
   const translated = detailTranslated && !showOriginal;
-  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? detailTranslationMarkup() : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
+  document.querySelector('#details-content').innerHTML = `${detail.image ? `<img class="detail-cover" src="${escape(detail.image)}" alt="">` : `<div class="detail-cover fallback">${icon(detail.type || 'package')}</div>`}<div class="detail-body"><h2>${escape(translated ? detailTranslated.title : detail.title)}</h2><div class="detail-meta"><span>${escape(detail.author)}</span><span>${detail.community ? `Steam 工坊 · ${detail.id}` : types[detail.type]}</span><span>${bytes(detail.size)}</span>${!detail.community ? `<span>${detail.resourceCount} 个资源</span>` : ''}</div>${detail.community && state.settings.autoTranslate ? detailTranslationMarkup() : ''}<p class="detail-description">${escape(translated ? detailTranslated.description || '作者尚未提供描述。' : detail.description || '作者尚未提供描述。')}</p>${detail.error ? `<div class="notice error">${icon('warning')}${escape(detail.error)}</div>` : ''}${detail.community ? workshopTagMarkup(detail, true) : ''}${!detail.community ? `<div class="detail-file">${escape(detail.file)}</div>` : ''}<div class="detail-footer">${localizationControl(detail, detail.community)}${subscriptionControls(detail, detail.community)}${detail.community ? favoriteControl(detail, page === 'favorites') : ''}${detail.community ? (subscriptionState(detail, true) ? button('重新下载 / 更新', 'subscribe-item', 'download', '', `data-id="${detail.id}" ${state.steam?.ugc?.ready ? '' : 'disabled'}`) : '') + button('官方页面', 'open-item', 'external', '', `data-id="${detail.id}"`) : button('在文件夹中显示', 'reveal-item', 'folder', '', `data-id="${detail.id}"`) + (detail.source !== 'cache' ? button(detail.enabled ? '禁用内容' : '启用内容', 'toggle-detail', '', 'soft', `data-id="${detail.id}"`) : '')}</div>${detail.community ? `<p class="info-line">${state.steam?.ugc?.ready ? '使用本机 Steam 当前账号执行订阅与下载。取消订阅会停止当前任务；已本地化的独立副本会继续留在模组管理中。' : escape(state.steam?.ugc?.error || '请先运行本机 Steam 并登录拥有游戏的账号。')}</p>` : ''}</div>`;
   if (!detail.community && (detail.workshopId || detail.localized)) {
     document.querySelector('#details-content .detail-footer').insertAdjacentHTML('beforebegin', '<p class="info-line localization-help">本地化会创建独立 VPK，停用对应工坊副本；取消订阅后仍保留。副本不随工坊自动更新，可像普通本地 Mod 一样启停、删除。</p>');
   }
@@ -452,8 +522,10 @@ const actions = {
   'toggle-detail': element => { const item = state.items.find(item => item.id === element.dataset.id); return changeEnabled([item.id], !item.enabled); },
   'reload-workshop': () => loadWorkshop(),
   'go-workshop': async () => { page = 'workshop'; render(); await loadWorkshop(); },
-  'previous-page': async () => { workshop.page = Math.max(1, workshop.page - 1); await loadWorkshop(); main.scrollTop = 0; },
-  'next-page': async () => { workshop.page++; await loadWorkshop(); main.scrollTop = 0; },
+  'toggle-favorite': element => toggleFavorite(element.dataset.id),
+  'previous-page': element => goPage(element.dataset.scope, (element.dataset.scope === 'favorites' ? favoriteView.page : workshop.page) - 1),
+  'next-page': element => goPage(element.dataset.scope, (element.dataset.scope === 'favorites' ? favoriteView.page : workshop.page) + 1),
+  'number-page': element => goPage(element.dataset.scope, element.dataset.number),
   'toggle-transfers': element => { transfersExpanded = element.getAttribute('aria-expanded') !== 'true'; renderTransfers(); },
   'clear-downloads': async () => { await call('clearDownloads'); await refresh(); },
   'cancel-download': async element => { await call('cancel', element.dataset.id); await refresh(); },
@@ -485,7 +557,7 @@ document.addEventListener('click', event => {
   const toggle = event.target.closest('[data-toggle]'); if (toggle) { const item = state.items.find(item => item.id === toggle.dataset.toggle); task(() => changeEnabled([item.id], !item.enabled)); return; }
   const detailButton = event.target.closest('[data-detail]'); if (detailButton) { showDetail(detailButton.dataset.detail, detailButton.dataset.community === 'true'); return; }
 });
-document.addEventListener('input', event => { if (event.target.id === 'library-search') updateLocalSearch(event.target.value); });
+document.addEventListener('input', event => { if (event.target.id === 'library-search') updateLocalSearch(event.target.value); if (event.target.id === 'favorites-search') { favoriteView.query = event.target.value.slice(0, 200); favoriteView.page = 1; renderFavoritesContent(); } });
 document.addEventListener('change', event => {
   if (event.target.id === 'console-zoom') task(async () => { const zoom = event.target.value === 'auto' ? 'auto' : Number(event.target.value); consoleState = await call('consoleZoom', zoom); state.settings.consoleZoom = zoom; });
   const target = event.target;
@@ -494,11 +566,16 @@ document.addEventListener('change', event => {
   if (target.id === 'library-sort') { sort = target.value; renderLibraryContent(); }
   if (target.id === 'library-slot') { slotFilter = target.value; renderTaxonomy(); renderLibraryContent(); }
   if (target.id === 'repeated-targets') { repeatedOnly = target.checked; renderLibraryContent(); }
+  if (target.id === 'favorites-category') { favoriteView.category = target.value; favoriteView.subcategory = 'all'; favoriteView.target = 'all'; favoriteView.page = 1; renderFavoritesTaxonomy(); renderFavoritesContent(); }
+  if (target.id === 'favorites-subcategory') { favoriteView.subcategory = target.value; favoriteView.target = 'all'; favoriteView.page = 1; renderFavoritesTaxonomy(); renderFavoritesContent(); }
+  if (target.id === 'favorites-target') { favoriteView.target = target.value; favoriteView.page = 1; renderFavoritesContent(); }
   if (target.id === 'workshop-category') { workshop.category = target.value; workshop.subcategory = 'all'; workshop.page = 1; workshop.loaded = false; renderWorkshopTaxonomy(); loadWorkshop(); }
   if (target.id === 'workshop-subcategory') { workshop.subcategory = target.value; workshop.page = 1; workshop.loaded = false; loadWorkshop(); }
   if (target.id === 'theme-select' || target.id === 'language-select') savePreferences({ [target.id === 'theme-select' ? 'theme' : 'language']: target.value }).catch(error => toast(error.message));
 });
 document.addEventListener('submit', event => {
+  if (event.target.dataset.pageJump) { event.preventDefault(); const form = event.target; if (form.reportValidity()) task(() => goPage(form.dataset.pageJump, form.elements.pageNumber.value)); }
+  if (event.target.id === 'favorites-form') event.preventDefault();
   if (event.target.id === 'workshop-form') { event.preventDefault(); workshop.query = document.querySelector('#workshop-search').value.trim(); workshop.page = 1; loadWorkshop(); }
   if (event.target.id === 'console-connect') { event.preventDefault(); const url = document.querySelector('#console-url').value.trim(); task(async () => { consoleState = await call('consoleConnect', url); state.settings.consoleUrl = consoleState.url; renderConsoleStatus(); }); }
   if (event.target.id === 'console-auth') { event.preventDefault(); const form = event.target, username = form.elements.username.value, password = form.elements.password.value; form.elements.password.value = ''; task(async () => { consoleState = await call('consoleAuth', username, password); renderConsoleStatus(); }); }
@@ -518,7 +595,7 @@ document.addEventListener('drop', event => {
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
 if (api) {
   let refreshTimer;
-  api.onChanged(() => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refresh(!['workshop', 'settings', 'console'].includes(page) && !document.querySelector('#library-search:focus, #library-slot:focus, #library-sort:focus')).catch(error => toast(error.message)), 250); });
+  api.onChanged(() => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refresh(!['workshop', 'favorites', 'settings', 'console'].includes(page) && !document.querySelector('#library-search:focus, #library-slot:focus, #library-sort:focus')).catch(error => toast(error.message)), 250); });
   api.onDownloadsChanged?.(downloads => {
     if (!state || !Array.isArray(downloads)) return;
     state.downloads = downloads;

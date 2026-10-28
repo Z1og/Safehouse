@@ -49,6 +49,24 @@ test('one unavailable workshop language returns successful results with a visibl
   const failed = new BilingualSearch({ search: async () => { throw new Error('offline'); } }, planner);
   await assert.rejects(failed.search('初音'), /查询失败/);
 });
+
+test('bilingual pagination seeks distant pages with bounded requests and preserves cached back navigation', async () => {
+  const calls = [], planner = { plan: async () => ({ original: 'test', queries: ['test', '测试'], warning: '' }) };
+  const community = { search: async (query, page, category, subcategory) => {
+    calls.push([page, category, subcategory]);
+    return { items: Array.from({ length: 30 }, (_, index) => ({ id: `${query}-${page}-${index}` })), hasMore: page < 1000 };
+  } };
+  const search = new BilingualSearch(community, planner), first = await search.search('test', 1, 'weapon', 'rifle');
+  const jump = await search.search('test', 80, 'weapon', 'rifle');
+  assert.equal(jump.page, 80); assert.equal(jump.items.length, 30);
+  assert.equal(calls.length, 4); assert.ok(calls.slice(2).every(value => value[0] === 80));
+  assert.deepEqual(await search.search('test', 1, 'weapon', 'rifle'), first);
+  assert.deepEqual(await search.search('test', 80, 'weapon', 'rifle'), jump);
+  const next = await search.search('test', 81, 'weapon', 'rifle'); assert.equal(next.items.length, 30);
+  assert.equal(new Set([...first.items, ...jump.items, ...next.items].map(value => value.id)).size, 90);
+  assert.ok(calls.every(value => value[1] === 'weapon' && value[2] === 'rifle'));
+  for (const page of [0, -1, 1.2, 1001]) await assert.rejects(search.search('test', page), /页码/);
+});
 test('console accepts HTTP(S) panel paths, rejects credential-bearing URLs and clamps native view bounds', () => {
   assert.equal(consoleUrl('http://panel.example.com:4174/#workshop'), 'http://panel.example.com:4174/#workshop');
   for (const url of ['file:///C:/test.html', 'javascript:alert(1)', 'https://admin:secret@example.com', 'steam://open/main']) assert.throws(() => consoleUrl(url));

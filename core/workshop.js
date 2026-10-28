@@ -40,7 +40,8 @@ class Workshop {
     const client = this.connect();
     const filter = resolveFilter(category, subcategory);
     const result = await timeout(client.workshop.getAllItems(page, query ? 11 : 3, 0, 0, 550, { requiredTags: filter.tags, matchAnyTag: filter.matchAnyTag, searchText: query, language: 'schinese', includeLongDescription: true }));
-    return { items: result.items.filter(Boolean).filter(item => item.consumerAppId === 550 && !item.banned).map(itemView), page, hasMore: page * 50 < result.totalResults };
+    const totalPages = Math.ceil(result.totalResults / 50);
+    return { items: result.items.filter(Boolean).filter(item => item.consumerAppId === 550 && !item.banned).map(itemView), page, hasMore: page < totalPages, totalPages };
   }
   async details(value) {
     const id = workshopId(value), client = this.connect();

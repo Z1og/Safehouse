@@ -1,7 +1,7 @@
 {
   "name": "safehouse-l4d2",
   "productName": "Safehouse",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "求生之路 2 本地地图与 Mod 管理器",
   "author": "Z1og",
@@ -21,6 +21,7 @@
     "smoke:server-connection": "node tests/server-connection-smoke.cjs",
     "smoke:localization": "node tests/localization-smoke.cjs",
     "smoke:translation": "node tests/translation-smoke.cjs",
+    "smoke:favorites": "node tests/favorites-smoke.cjs",
     "capture": "node scripts/capture.cjs",
     "pack": "node scripts/pack.cjs",
     "licenses": "node scripts/licenses.cjs"
