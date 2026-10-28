@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, nativeTheme, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, nativeTheme, clipboard, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -15,9 +15,13 @@ const { atomicWrite, readJson } = require('./core/valve');
 const { SearchPlanner, BilingualSearch } = require('./core/search');
 const { PROJECT, projectLink } = require('./core/project');
 const { CenterConsole, consoleUrl, configuredConsoleUrl, DEFAULT_CONSOLE_URL } = require('./core/console');
+const { ConsoleLoginStore } = require('./core/console-login');
 
 app.setName('Safehouse');
-if (process.env.SAFEHOUSE_DATA_DIR) app.setPath('userData', path.resolve(process.env.SAFEHOUSE_DATA_DIR));
+const profileDirectory = process.env.SAFEHOUSE_DATA_DIR ? path.resolve(process.env.SAFEHOUSE_DATA_DIR) : path.join(app.getPath('appData'), 'Safehouse');
+fs.mkdirSync(profileDirectory, { recursive: true });
+app.setPath('userData', profileDirectory);
+app.setPath('sessionData', profileDirectory);
 if (!app.requestSingleInstanceLock()) app.quit();
 let mainWindow, library, downloads, community, translator, settings, settingsFile, discovery, workshop;
 let operation = false;
@@ -58,7 +62,7 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', (event, url) => { if (url !== rendererUrl) event.preventDefault(); });
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadFile(rendererPath);
-  centerConsole = new CenterConsole({ electron: require('electron'), window: mainWindow, url: settings.consoleUrl || DEFAULT_CONSOLE_URL, zoom: settings.consoleZoom || 'auto', directDownloads: panelDownloads, changed: value => { if (!mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:consoleChanged', value); } });
+  centerConsole = new CenterConsole({ electron: require('electron'), window: mainWindow, url: settings.consoleUrl || DEFAULT_CONSOLE_URL, zoom: settings.consoleZoom || 'auto', directDownloads: panelDownloads, loginStore: new ConsoleLoginStore({ directory: profileDirectory, safeStorage }), changed: value => { if (!mainWindow.isDestroyed()) mainWindow.webContents.send('safehouse:consoleChanged', value); } });
 }
 app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); } });
 app.whenReady().then(async () => {
@@ -88,6 +92,10 @@ app.whenReady().then(async () => {
     catch (error) { return { ok: false, error: error.message }; }
   });
   ipcMain.on('safehouse:panelConnection', (event, value) => { try { centerConsole?.updateConnection(event, value); } catch { /* Ignore unrelated frames. */ } });
+  ipcMain.handle('safehouse:panelLogin', async (event, value) => {
+    try { return { ok: true, ...await centerConsole.loginRequest(event, value) }; }
+    catch (error) { return { ok: false, error: error.message }; }
+  });
   workshop = new Workshop({ disabled: process.env.SAFEHOUSE_DISABLE_STEAMWORKS === '1' });
   community = new Community({ session: session.defaultSession, workshop });
   translator = new Translator({ file: path.join(stateDir, 'translations.json'), fetch: (...args) => session.defaultSession.fetch(...args) });
@@ -132,6 +140,7 @@ app.whenReady().then(async () => {
   bind('consoleOpen', () => shell.openExternal(consoleUrl(centerConsole.url)));
   bind('consoleZoom', mode => { const result = centerConsole.setZoom(mode); settings.consoleZoom = mode; atomicWrite(settingsFile, JSON.stringify(settings, null, 2)); return result; });
   bind('consoleCopyConnection', () => centerConsole.copyConnection());
+  bind('consoleForgetLogin', () => centerConsole.forgetLogin());
   bind('panelInstall', id => { if (operation) throw new Error('正在处理文件操作'); return panelDownloads.install(id); });
   bind('panelReveal', id => shell.showItemInFolder(panelDownloads.file(id)));
   bind('details', async id => { const item = await community.details(id); let subscription = {}; try { subscription = workshop.snapshot(item.id); } catch { } return { ...item, ...subscription }; });

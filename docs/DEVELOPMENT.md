@@ -4,7 +4,7 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 
 ## 直接运行
 
-完整解压 `Safehouse-0.1.13-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
+完整解压 `Safehouse-0.1.14-win-x64.zip`，双击根目录的 `Safehouse.exe`。无需安装 Node.js，启动清单使用普通用户 `asInvoker`，不请求管理员权限。首次运行会将应用复制到 `%LOCALAPPDATA%\Safehouse\versions`，之后打开已准备好的版本。若旧缓存及其子目录不可写，运行副本会改用 `%TEMP%\Safehouse-runtime\versions`；设置仍保存在原来的永久用户目录。启动器为原生 Windows EXE，不依赖 PowerShell 或 CMD。启动日志位于所用缓存根目录的 `launcher.log`；未签名版本仍可能显示 Windows 发布者提示。`Start Safehouse.cmd` 只是同一 EXE 的备用入口。测试新版前请关闭仍以管理员身份运行的旧版，以免旧版占用单实例锁。
 
 0.1.2 修正本机发布目录继承的 Low mandatory label：旧 EXE 实际以低完整性运行，写入 AppData 被 Windows 拒绝，因此看起来需要管理员权限。打包脚本仅将自己生成的启动器和应用 EXE 标记为 Medium，不修改工作区或系统目录 ACL，不关闭 UAC。ZIP 不携带 NTFS 完整性标签；建议完整解压到正常的用户文件夹。
 
@@ -56,7 +56,7 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 - 地图管理中点击「直连下载导出（推荐）」，再点击「下载到客户端」。不再需要浏览器扩展或复制命令，客户端直接从网盘传输文件；上方模组任务显示真实字节进度、取消、失败原因与结果。
 - 文件保存至系统「下载」目录中的 `Safehouse` 文件夹，下载完成可打开文件夹或点击「安装到模组管理」。支持 VPK / ZIP，最大 2 GiB；安装仍经过原有 VPK 和 ZIP 检查，不覆盖现有同名模组。下载源来自当前面板或其百度 HTTPS 直链；签名链接只驻留内存，不写入任务记录。
 - 直链过期、文件格式不符、大小不一致或连接空闲超时会显示失败，需从面板重新获取链接。取消会清理未完成文件，清理记录会保留已完成下载。普通服务器导出与插件下载不属于本次直连适配。
-- 面板会话使用固定的 `persist:safehouse-center-console` 分区，数据位于 `%APPDATA%\Safehouse\Partitions`，与 EXE 发布目录分开。退出时刷新站点存储和 Cookie；更新版本不清理此目录，也不保存面板密码。
+- 面板会话使用固定的 `persist:safehouse-center-console` 分区，数据位于 `%APPDATA%\Safehouse\Partitions`，与 EXE 发布目录分开。退出时刷新站点存储和 Cookie；更新版本不清理此目录；0.1.7–0.1.13 只保留 Cookie，不保存面板密码。0.1.14 的可选记住登录见下文。
 - 0.1.6 及更早版本使用临时会话，已经丢失的登录记录无法恢复，升级后需重新登录一次。之后在服务器会话有效期内保留登录；服务器重启、会话到期、修改密码或主动退出后仍须重新登录。HTTP Basic 身份验证与面板自己的 Cookie 登录机制不同，Basic 密码不持久保存。
 
 ## 动态服务器连接卡片（0.1.8）
@@ -94,6 +94,16 @@ Windows 10/11 x64 桌面客户端，采用 Miuix / HyperOS 的视觉风格。界
 - 页码可点击或输入回车跳转。单一查询使用社区真实页码；社区有总页数时显示并校验。双语会话连续合并去重，大跨度跳转直接从所选社区页建立新游标，不预取中间所有页面；已展示页缓存保持返回稳定。没有可靠总页数时不估造总数。
 - 整页标题翻译独立于搜索返回，不占用界面的操作锁；旧页的后台结果不会覆盖新页。`smoke:favorites` 在翻译请求始终等待时验证下一页、数字按钮、输入跳转和收藏，并用临时 VPK 验证移除收藏后安装、启停与订阅保持。
 
+## 控制台登录保持（0.1.14）
+
+- 启动前显式将 `userData` 和 `sessionData` 固定到 `%APPDATA%\Safehouse`；测试覆盖目录使用 `SAFEHOUSE_DATA_DIR`，两个路径始终一致。保留既有 `persist:safehouse-center-console` 分区，不复制、清空或重建用户 Cookie。
+- 当前 L4D2-Control 服务端会话驻内存，管理员八小时、普通账号二十四小时到期；服务端重启后即使 Cookie 存在也会无效。客户端不能通过重复写入 Cookie 延长或恢复服务端会话。
+- `core/console-login.js` 实现显式勾选的账号保存：仅适配 `/login`、`/login.html` 的两个已有登录表单，通过当前隔离会话提交正常登录请求；确认成功并验证 `/api/auth/session` 后，才用 Electron 异步 safeStorage 系统加密保存。未勾选、注册及 HTTP Basic 继续由原面板处理，不采集这些表单的密码。
+- `console-logins.json` 仅包含版本、来源 SHA-256 索引和系统密文；账号、密码及完整来源都在密文内。来源按协议、域名、端口隔离；记录不进入 settings、下载历史、日志或 Git。无法使用系统加密时不回退到明文。
+- 登录页出现时先验证现有会话，有效则不发送密码；无效且存在明确保存的记录才重新认证。失败每分钟最多一次，账号被拒绝即删除保存；网络失败保留密文供稍后手动重试，不循环撞登录。
+- 面板退出登录请求、退出标记 Cookie 和本人修改密码请求立即清除当前来源保存；取消正在执行的登录，禁止延迟响应重新保存。工具栏“忘记登录”清除保存但保留当前 Cookie 的正常生命周期。网页没有解密接口、通用 IPC 或 Node 访问。
+- `npm run smoke:console-login` 使用临时账号和内存服务端，验证 Cookie 跨进程、真实系统加密、普通/授权登录、服务重启恢复、来源隔离、主动退出、忘记登录与改密码后停止重试。设置 `SAFEHOUSE_UPGRADE_FROM_BIN` 可从旧发布程序登录后升级验证；`SAFEHOUSE_RELOCATED_BIN` 可验证换 EXE 路径后的密文恢复。
+
 ## Steam、下载和翻译的实际行为
 
 管理器启动后直接读取本机 Steam 安装目录下的 `config/loginusers.vdf`，显示最近使用的本地账号。Steam 未运行时可以从设置页打开 Steam；管理器不要求输入密码、不嵌入 Steam 登录页，也不保存网页会话。
@@ -129,6 +139,7 @@ npm run smoke:renderer
 npm run smoke:taxonomy
 npm run smoke:console-search
 npm run smoke:panel-download
+npm run smoke:console-login
 npm run smoke:server-connection
 npm run smoke:translation
 npm run smoke:favorites

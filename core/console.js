@@ -3,6 +3,7 @@ const DEFAULT_CONSOLE_URL = '';
 // cookies and site preferences in Safehouse's permanent per-user profile.
 const CONSOLE_PARTITION = 'persist:safehouse-center-console';
 const path = require('node:path');
+const { ConsoleLogin } = require('./console-login');
 const { isIP } = require('node:net');
 function gameConnection(value) {
   if (typeof value !== 'string' || value.length > 512) return null;
@@ -39,11 +40,12 @@ function viewBounds(value, size) {
 }
 
 class CenterConsole {
-  constructor({ electron, window, url, changed, zoom = 'auto', directDownloads }) {
+  constructor({ electron, window, url, changed, zoom = 'auto', directDownloads, loginStore }) {
     this.electron = electron; this.window = window; this.url = configuredConsoleUrl(url); this.changed = changed;
     panelZoom(1360, zoom); this.zoomMode = zoom; this.directDownloads = directDownloads;
     this.state = { status: 'idle', message: '先填写服务器管理面板地址，再连接。', url: this.url };
     this.visible = false; this.attached = false; this.auth = null; this.bounds = null; this.generation = 0;
+    if (loginStore) this.login = new ConsoleLogin({ store: loginStore, fetch: (...args) => this.panelSession.fetch(...args), signedOut: async url => (await this.panelSession.cookies.get({ url, name: 'l4d2-session' })).some(cookie => cookie.value === 'signed-out'), changed: () => this.changed(this.snapshot()) });
     this.loginHandler = (event, webContents, details, authInfo, callback) => {
       if (webContents !== this.view?.webContents) return;
       event.preventDefault();
@@ -53,8 +55,18 @@ class CenterConsole {
     electron.app.on('login', this.loginHandler);
     window.once('closed', () => this.destroy());
   }
-  snapshot() { return { ...this.state, url: this.url, serverConnection: this.serverConnection || null, zoom: this.zoomMode, zoomFactor: this.bounds ? panelZoom(this.bounds.width, this.zoomMode) : 1 }; }
+  snapshot() { return { ...this.state, url: this.url, loginRemembered: Boolean(this.url && this.login?.store.has(this.url)), serverConnection: this.serverConnection || null, zoom: this.zoomMode, zoomFactor: this.bounds ? panelZoom(this.bounds.width, this.zoomMode) : 1 }; }
   isPanelSender(event) { return event.sender === this.view?.webContents && event.senderFrame && event.senderFrame === event.senderFrame.top && sameOrigin(event.senderFrame.url, this.url); }
+  async loginRequest(event, value) {
+    if (!this.isPanelSender(event) || !['/login', '/login.html'].includes(new URL(event.senderFrame.url).pathname)) throw new Error('登录请求来源无效');
+    if (!this.login || !value || !['prepare', 'login', 'forget'].includes(value.action)) throw new Error('登录请求无效');
+    const url = this.url;
+    if (value.action === 'forget') { this.login.forget(url); return { remembered: false }; }
+    if (value.action === 'prepare') return this.login.prepare(url);
+    if (value.remember !== true) throw new Error('请先勾选记住登录');
+    return this.login.login(url, value.credentials);
+  }
+  forgetLogin() { if (this.url) this.login?.forget(this.url); return this.snapshot(); }
   updateConnection(event, value) {
     if (!this.isPanelSender(event)) throw new Error('服务器地址来源无效');
     if (this.state.status !== 'ready') return;
@@ -83,8 +95,20 @@ class CenterConsole {
       this.panelSession.setPermissionRequestHandler((_, __, callback) => callback(false));
       this.panelSession.setPermissionCheckHandler(() => false);
       this.panelSession.on('will-download', event => event.preventDefault());
-      this.cookieChanged = () => { clearTimeout(this.cookieTimer); this.cookieTimer = setTimeout(() => this.flush().catch(() => {}), 150); this.cookieTimer.unref?.(); };
+      this.cookieChanged = (_, cookie, __, removed) => {
+        if (!removed && cookie?.name === 'l4d2-session' && cookie.value === 'signed-out' && this.url && cookie.domain?.replace(/^\./, '') === new URL(this.url).hostname) {
+          try { this.login?.forget(this.url); } catch { this.changed({ ...this.snapshot(), notice: '退出已生效，但本机登录记录清理失败，请使用“忘记登录”重试' }); }
+        }
+        clearTimeout(this.cookieTimer); this.cookieTimer = setTimeout(() => this.flush().catch(() => {}), 150); this.cookieTimer.unref?.();
+      };
       this.panelSession.cookies?.on('changed', this.cookieChanged);
+      if (this.login) this.panelSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+        if (details.method === 'POST' && sameOrigin(details.url, this.url) && ['/api/auth/logout', '/api/auth/password'].includes(new URL(details.url).pathname)) {
+          try { this.login.forget(this.url); }
+          catch { this.changed({ ...this.snapshot(), notice: '本机登录记录清理失败，请使用“忘记登录”重试' }); }
+        }
+        callback({});
+      });
     }
     const panelSession = this.panelSession;
     this.view = new this.electron.WebContentsView({ webPreferences: { session: panelSession, preload: path.join(__dirname, '../console-preload.js'), nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true, webSecurity: true, navigateOnDragDrop: false, spellcheck: false } });
@@ -133,6 +157,7 @@ class CenterConsole {
     if (!value) { this.url = ''; this.setState('idle', '先填写服务器管理面板地址，再连接。'); return this.snapshot(); }
     const next = consoleUrl(value), changedOrigin = !sameOrigin(next, this.url), generation = ++this.generation;
     this.cancelAuth();
+    if (changedOrigin) this.login?.close();
     if (changedOrigin && this.view) { if (this.attached) this.window.contentView.removeChildView(this.view); this.attached = false; this.view.webContents.removeAllListeners(); this.view.webContents.close(); this.view = null; }
     this.url = next; this.ensureView(); this.setState('loading', '正在连接服务器面板…');
     clearTimeout(this.loadTimer);
@@ -147,6 +172,6 @@ class CenterConsole {
   }
   cancelAuth() { if (this.auth) { const callback = this.auth; this.auth = null; callback(); } }
   async flush() { this.panelSession?.flushStorageData?.(); await this.panelSession?.cookies?.flushStore(); }
-  destroy() { this.generation++; clearTimeout(this.loadTimer); clearTimeout(this.cookieTimer); this.panelSession?.cookies?.removeListener('changed', this.cookieChanged); this.electron.app.removeListener('login', this.loginHandler); this.cancelAuth(); if (this.view && !this.view.webContents.isDestroyed()) this.view.webContents.close(); this.view = null; }
+  destroy() { this.generation++; this.login?.close(); clearTimeout(this.loadTimer); clearTimeout(this.cookieTimer); this.panelSession?.cookies?.removeListener('changed', this.cookieChanged); if (this.login && this.panelSession) this.panelSession.webRequest.onBeforeRequest(null); this.electron.app.removeListener('login', this.loginHandler); this.cancelAuth(); if (this.view && !this.view.webContents.isDestroyed()) this.view.webContents.close(); this.view = null; }
 }
 module.exports = { CenterConsole, consoleUrl, configuredConsoleUrl, sameOrigin, viewBounds, panelZoom, gameConnection, DEFAULT_CONSOLE_URL, CONSOLE_PARTITION };

@@ -39,14 +39,14 @@
 
 ## 下载与启动
 
-1. 打开 [Releases](https://github.com/Z1og/Safehouse/releases/latest)，下载 `Safehouse-0.1.13-win-x64.zip`。
+1. 打开 [Releases](https://github.com/Z1og/Safehouse/releases/latest)，下载 `Safehouse-0.1.14-win-x64.zip`。
 2. **完整解压 ZIP**，双击解压目录内的 `Safehouse.exe`。不要把启动器单独拿出来，也不要直接在压缩包里运行。
 3. 首次启动自动识别 Steam 游戏库；未识别时，到「偏好设置」手动选择 `Left 4 Dead 2` 目录。
 4. 拖入 VPK / ZIP，或前往「创意工坊」订阅内容，即可开始使用。
 
 支持 **Windows 10 / 11 x64**。玩家无需安装 Node.js，也无需以管理员身份运行。发布程序暂未代码签名，Windows 可能显示未知发布者提示。
 
-更新时先退出旧窗口，完整解压新版并启动即可。永久设置和面板会话存于 `%APPDATA%\Safehouse`，与版本文件夹分开；不要删除该数据目录。面板会话仍受服务器的过期、退出和密码变更影响。
+更新时先退出旧窗口，完整解压新版并启动即可。永久设置和面板会话存于 `%APPDATA%\Safehouse`，与版本文件夹分开；不要删除该数据目录。面板会话仍受服务器的过期、退出和密码变更影响；需要自动恢复时，可在面板登录页勾选“记住登录（仅本机加密保存）”。
 
 ## 模组如何管理
 
@@ -65,6 +65,10 @@
 「中心控制台」中填写自己的完整 HTTP / HTTPS 面板地址，连接并保存。新用户没有预设服务器；旧版本已保存的地址继续保留。
 
 接入 [L4D2-Control](https://github.com/Z1og/L4D2-Control) 后，可以继续使用原面板的服务器管理功能。对应面板的「直连下载」可交由客户端传输，显示进度、取消、打开文件夹及安装入口；需要有效直链与相应服务可用。
+
+从 0.1.14 起，面板的普通登录、授权登录表单可勾选 **“记住登录（仅本机加密保存）”**。登录成功后，账号和密码通过 Windows 当前用户的系统加密保存在固定用户目录；更新、更换 EXE 文件夹或面板服务重启后，如果原会话已失效，客户端使用保存的信息重新请求面板登录。未勾选时不保存密码；已有有效 Cookie 继续直接使用。服务器拒绝凭据时停止自动重试。
+
+主动点击面板“退出登录”会同时清除当前面板保存的信息；工具栏“忘记登录”仅删除本机保存的账号信息。记录按完整协议、域名和端口隔离，不使用其他面板的账号。旧版本没有保存过的密码无法补回，首次使用此功能需手动登录并勾选一次。HTTP Basic 登录仍只在本次进程使用，不属于记住登录功能。
 
 左侧服务器连接命令来自面板实际提供的游戏地址，而非面板网页地址；支持 IPv4、域名及带方括号的 IPv6。切换面板或失去连接后会清除旧命令。
 
@@ -101,6 +105,7 @@ npm run smoke
 npm run smoke:taxonomy
 npm run smoke:console-search
 npm run smoke:panel-download
+npm run smoke:console-login
 npm run smoke:server-connection
 npm run smoke:localization
 npm run smoke:translation
